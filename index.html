@@ -48,6 +48,8 @@
   .meta{font-size:11px; color:var(--muted); flex:0 0 auto}
   .rowdel{position:absolute; top:0; right:0; bottom:0; width:112px; border:0; border-radius:0;
     padding:0; margin:0; background:var(--haute); color:#fff; font-size:14px; font-weight:600; z-index:0}
+  .rowsnooze{position:absolute; top:0; left:0; bottom:0; width:112px; border:0; border-radius:0;
+    padding:0; margin:0; background:var(--moyenne); color:#1c1c1e; font-size:14px; font-weight:600; z-index:0}
   .empty{padding:20px 16px; color:var(--muted)}
   .sheetlink{display:block; text-align:center; padding:12px; color:var(--muted); font-size:14px;
     text-decoration:none; border-top:1px solid var(--line)}
@@ -110,13 +112,14 @@
       var tache = (r[0]||"").toString().trim(); if(!tache) continue;
       var etat = (r[1]||"").toString().toLowerCase();
       if (etat.indexOf("termin")!==-1 || etat.indexOf("fait")!==-1) continue;
-      items.push({row:i+1, tache:tache, prop:(r[2]||"").toString(), date:fmtDate(r[3]), prio:(r[4]||"").toString()});
+      items.push({row:i+1, tache:tache, etat:(r[1]||"").toString(), prop:(r[2]||"").toString(), date:fmtDate(r[3]), prio:(r[4]||"").toString()});
     }
     items.sort(function(a,b){ return (ORDER[a.prio]==null?9:ORDER[a.prio])-(ORDER[b.prio]==null?9:ORDER[b.prio]); });
     CURRENT = items;
     document.getElementById("count").textContent = items.length;
     var html = items.map(function(it, idx){
       return '<div class="item">'
+        + '<button class="rowsnooze" data-idx="'+idx+'">📅 Demain</button>'
         + '<div class="body">'
         + '<span class="dot" style="background:'+(COLOR[it.prio]||"#888")+'"></span>'
         + '<span class="tx">'+esc(it.tache)+'</span>'
@@ -129,26 +132,40 @@
     attachSwipe();
   }
 
+  var opened = null;
   function attachSwipe(){
-    var open = null; // le .body actuellement ouvert
+    opened = null;
     var items = document.querySelectorAll("#list .item");
     items.forEach(function(it){
       var body = it.querySelector(".body");
       var del = it.querySelector(".rowdel");
-      if(!body || !del) return;
-      var startX=0, cur=0, drag=false, isOpen=false;
+      var sno = it.querySelector(".rowsnooze");
+      if(!body) return;
+      var startX=0, cur=0, drag=false, pos=0; // pos: -112 supprimer · 0 · 112 demain
       function setX(x){ body.style.transform = "translateX("+x+"px)"; }
-      function openRow(){ isOpen=true; setX(-112); if(open && open!==body){ open.style.transform="translateX(0)"; } open=body; }
-      function closeRow(){ isOpen=false; setX(0); if(open===body) open=null; }
-      body.addEventListener("pointerdown", function(e){ startX=e.clientX; cur=isOpen?-112:0; drag=true; body.style.transition="none"; try{body.setPointerCapture(e.pointerId);}catch(_){} });
-      body.addEventListener("pointermove", function(e){ if(!drag) return; var dx=e.clientX-startX; var base=isOpen?-112:0; cur=Math.min(0,Math.max(-112, base+dx)); setX(cur); });
-      body.addEventListener("pointerup", function(){ if(!drag) return; drag=false; body.style.transition="transform .15s ease"; if(cur < -56) openRow(); else closeRow(); });
-      body.addEventListener("pointercancel", function(){ drag=false; body.style.transition="transform .15s ease"; closeRow(); });
-      del.addEventListener("click", function(){
-        var it2 = CURRENT[+del.dataset.idx];
-        if(it2) doDelete(it2.row, it2.tache, document.getElementById("status"));
-      });
+      function openAt(p){ if(opened && opened!==body) opened.style.transform="translateX(0)"; pos=p; setX(p); opened = (p!==0)?body:null; }
+      body.addEventListener("pointerdown", function(e){ startX=e.clientX; cur=pos; drag=true; body.style.transition="none"; try{body.setPointerCapture(e.pointerId);}catch(_){} });
+      body.addEventListener("pointermove", function(e){ if(!drag) return; var dx=e.clientX-startX; cur=Math.min(112,Math.max(-112, pos+dx)); setX(cur); });
+      body.addEventListener("pointerup", function(){ if(!drag) return; drag=false; body.style.transition="transform .15s ease"; if(cur < -56) openAt(-112); else if(cur > 56) openAt(112); else openAt(0); });
+      body.addEventListener("pointercancel", function(){ drag=false; body.style.transition="transform .15s ease"; openAt(0); });
+      if(del) del.addEventListener("click", function(){ var it2=CURRENT[+del.dataset.idx]; if(it2) doDelete(it2.row, it2.tache, document.getElementById("status")); });
+      if(sno) sno.addEventListener("click", function(){ var it2=CURRENT[+sno.dataset.idx]; if(it2) doSnooze(it2, document.getElementById("status")); });
     });
+  }
+
+  function doSnooze(item, s){
+    if(!TOKEN){ s.textContent="Ouvre via l'icône « Parler » (jeton manquant)"; return; }
+    s.textContent="Report à demain…";
+    var d=new Date(); d.setDate(d.getDate()+1);
+    var dd=("0"+d.getDate()).slice(-2)+"/"+("0"+(d.getMonth()+1)).slice(-2)+"/"+d.getFullYear();
+    fetch(EXEC,{method:"POST",body:JSON.stringify({token:TOKEN, tache:item.tache, proprietaire:item.prop, priorite:item.prio, etat:item.etat, dateLimite:dd})})
+      .then(function(r){return r.json();})
+      .then(function(r){
+        if(!r.ok) throw new Error(r.error||"ajout");
+        return fetch(EXEC,{method:"POST",body:JSON.stringify({token:TOKEN, action:"delete", row:item.row, expect:item.tache})}).then(function(x){return x.json();});
+      })
+      .then(function(r2){ s.textContent=(r2 && !r2.ok) ? ("Reportée mais ancienne restée : "+r2.error) : "Reportée à demain ✅"; load(); })
+      .catch(function(e){ s.textContent="Erreur : "+e.message; });
   }
 
   function load(){
