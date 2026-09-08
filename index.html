@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>To-do des Mimis</title>
+<style>
+  :root{
+    --bg:#14161a; --card:#1c1f26; --line:#2a2e37; --txt:#f2f3f5; --muted:#9aa0aa;
+    --haute:#e5484d; --moyenne:#f5a623; --basse:#3fa45b;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+    background:var(--bg); color:var(--txt);
+    display:flex; flex-direction:column; min-height:100%;
+  }
+  header{padding:14px 16px 8px}
+  h1{font-size:18px; margin:0 0 10px; display:flex; justify-content:space-between; align-items:center}
+  h1 .count{font-size:14px; color:var(--muted); font-weight:500}
+  .controls{display:flex; flex-direction:column; gap:8px}
+  button{font-size:17px; border:0; border-radius:14px; padding:14px; cursor:pointer; color:#fff}
+  #mic{background:var(--haute); font-size:20px; font-weight:600}
+  #mic.rec{background:#b23; animation:pulse 1s infinite}
+  @keyframes pulse{50%{opacity:.6}}
+  #go{background:var(--basse); font-weight:600}
+  textarea{width:100%; font-size:17px; padding:11px; border-radius:12px; border:1px solid var(--line);
+    background:#0f1115; color:var(--txt); min-height:60px; resize:vertical}
+  .row2{display:flex; gap:8px}
+  select{flex:1; font-size:15px; padding:11px; border-radius:12px; border:1px solid var(--line);
+    background:#0f1115; color:var(--txt)}
+  #status{min-height:20px; font-size:14px; color:var(--muted); text-align:center; margin-top:4px}
+  .listwrap{flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:4px 0 16px}
+  .item{display:flex; align-items:center; gap:10px; padding:9px 16px; border-bottom:1px solid var(--line)}
+  .dot{width:9px; height:9px; border-radius:50%; flex:0 0 auto}
+  .tx{flex:1; font-size:15px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .meta{font-size:11px; color:var(--muted); flex:0 0 auto}
+  .empty{padding:20px 16px; color:var(--muted)}
+  .sheetlink{display:block; text-align:center; padding:12px; color:var(--muted); font-size:14px;
+    text-decoration:none; border-top:1px solid var(--line)}
+  /* mode compact (tuile widget) : cacher les contrôles d'ajout */
+  body.compact header .controls, body.compact #status, body.compact .sheetlink{display:none}
+  body.compact header{padding:10px 14px 4px}
+  body.compact h1{font-size:15px}
+  body.compact .item{padding:5px 14px; font-size:13px}
+  body.compact .tx{font-size:13px}
+</style>
+</head>
+<body>
+<header>
+  <h1><span>To-do des Mimis</span><span class="count" id="count"></span></h1>
+  <div class="controls">
+    <button id="mic">🎤 Parler</button>
+    <textarea id="t" placeholder="Dis ou écris la tâche…"></textarea>
+    <div class="row2">
+      <select id="prio"><option>Haute</option><option selected>Moyenne</option><option>Basse</option></select>
+      <select id="own"><option value="">Qui ?</option><option>Maxence</option><option>Marine</option><option>Maxence + Marine</option></select>
+    </div>
+    <button id="go">Ajouter au Sheet</button>
+    <div id="status"></div>
+  </div>
+</header>
+<div class="listwrap" id="list"><div class="empty">Chargement…</div></div>
+<a class="sheetlink" id="sheet" href="https://docs.google.com/spreadsheets/d/1HxBL95w047MpT2EqbSjNVcW-_FJBUQH22PdxkjSfQ7o/edit" target="_blank" rel="noopener">✎ Ouvrir le Sheet (tout modifier)</a>
+
+<script>
+  var EXEC = "https://script.google.com/macros/s/AKfycbxU535e3IPWFkmDDj-jHNspuVNjdbrbtYhOHA162v7xYri66DM5ytRdwMU2IXxfV2ct7A/exec";
+  // Le jeton n'est PAS dans le code (depot public). Il arrive via le # de l'URL
+  // (icone "Parler" : .../#monjeton), jamais envoye au serveur, puis memorise en local.
+  var TOKEN = "";
+  (function(){
+    var h = location.hash ? decodeURIComponent(location.hash.slice(1)) : "";
+    if (h) { TOKEN = h; try { localStorage.setItem("mimi_token", h); } catch(e){} }
+    else { try { TOKEN = localStorage.getItem("mimi_token") || ""; } catch(e){} }
+  })();
+  var ORDER = { "Haute":0, "Moyenne":1, "Basse":2 };
+  var COLOR = { "Haute":"var(--haute)", "Moyenne":"var(--moyenne)", "Basse":"var(--basse)" };
+
+  if (new URLSearchParams(location.search).get("compact") === "1") document.body.classList.add("compact");
+
+  function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+  function render(rows){
+    var items = [];
+    for (var i=1;i<rows.length;i++){
+      var r = rows[i];
+      var tache = (r[0]||"").toString().trim(); if(!tache) continue;
+      var etat = (r[1]||"").toString().toLowerCase();
+      if (etat.indexOf("termin")!==-1 || etat.indexOf("fait")!==-1) continue;
+      items.push({tache:tache, prop:(r[2]||"").toString(), prio:(r[4]||"").toString()});
+    }
+    items.sort(function(a,b){ return (ORDER[a.prio]==null?9:ORDER[a.prio])-(ORDER[b.prio]==null?9:ORDER[b.prio]); });
+    document.getElementById("count").textContent = items.length;
+    var html = items.map(function(it){
+      return '<div class="item"><span class="dot" style="background:'+(COLOR[it.prio]||"#888")+'"></span>'
+        + '<span class="tx">'+esc(it.tache)+'</span><span class="meta">'+esc(it.prop)+'</span></div>';
+    }).join("");
+    document.getElementById("list").innerHTML = html || '<div class="empty">Rien à faire 🎉</div>';
+  }
+
+  function load(){
+    fetch(EXEC+"?json=1").then(function(r){return r.json();}).then(function(d){
+      if(d && d.ok) render(d.taches);
+    }).catch(function(){});
+  }
+
+  var rec=null;
+  document.getElementById("mic").addEventListener("click", function(){
+    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    var s = document.getElementById("status");
+    if(!SR){ s.textContent="Reco vocale non dispo ici — écris à la main"; return; }
+    var btn=this;
+    rec=new SR(); rec.lang="fr-FR"; rec.interimResults=false;
+    btn.classList.add("rec"); btn.textContent="🎤 Écoute…";
+    rec.onresult=function(ev){ document.getElementById("t").value=ev.results[0][0].transcript; };
+    rec.onend=function(){ btn.classList.remove("rec"); btn.textContent="🎤 Parler"; };
+    rec.onerror=function(ev){ btn.classList.remove("rec"); btn.textContent="🎤 Parler"; s.textContent="Micro : "+ev.error; };
+    rec.start();
+  });
+
+  document.getElementById("go").addEventListener("click", function(){
+    var t = document.getElementById("t").value.trim();
+    var s = document.getElementById("status");
+    if(!t){ s.textContent="Rien à ajouter"; return; }
+    if(!TOKEN){ s.textContent="Ouvre via l'icône « Parler » (jeton manquant)"; return; }
+    var p = { token:TOKEN, tache:t, priorite:document.getElementById("prio").value, proprietaire:document.getElementById("own").value };
+    s.textContent="Ajout en cours…";
+    fetch(EXEC, {method:"POST", body:JSON.stringify(p)})
+      .then(function(r){return r.json();})
+      .then(function(r){
+        if(r.ok){ s.textContent="Ajoutée ✅"; document.getElementById("t").value=""; load(); }
+        else { s.textContent="Erreur : "+r.error; }
+      })
+      .catch(function(e){ s.textContent="Erreur réseau : "+e.message; });
+  });
+
+  load();
+  setInterval(load, 60000);
+</script>
+</body>
+</html>
