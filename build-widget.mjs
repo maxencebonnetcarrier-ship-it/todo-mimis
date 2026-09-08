@@ -56,8 +56,12 @@ const html = `<!doctype html>
   .tx{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .meta{font-size:11px;color:#9aa0aa;flex:0 0 auto}
   .empty{color:#9aa0aa;font-size:13px;padding:10px 0}
+  .mic{display:block;text-align:center;text-decoration:none;background:#e5484d;color:#fff;
+    font-size:16px;font-weight:600;padding:11px;border-radius:12px;margin:2px 0 10px}
 </style></head><body>
-<div class="card"><h1><span>To-do des Mimis</span><span class="c">${items.length} · ${now}</span></h1>
+<div class="card">
+<h1><span>To-do des Mimis</span><span class="c">${items.length} · ${now}</span></h1>
+<a class="mic" href="index.html">🎤 Parler / Ajouter</a>
 ${li}
 </div></body></html>`;
 
