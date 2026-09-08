@@ -40,10 +40,14 @@
   .cfDel{background:var(--haute); font-size:14px; padding:8px 12px; width:auto; margin:0; border-radius:10px}
   .cfCancel{background:#3a3f49; font-size:14px; padding:10px; margin-top:8px; border-radius:10px}
   .listwrap{flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:4px 0 16px}
-  .item{display:flex; align-items:center; gap:10px; padding:9px 16px; border-bottom:1px solid var(--line)}
+  .item{position:relative; overflow:hidden; border-bottom:1px solid var(--line)}
+  .body{display:flex; align-items:center; gap:10px; padding:9px 16px; background:var(--bg);
+    transition:transform .15s ease; touch-action:pan-y; position:relative; z-index:1}
   .dot{width:9px; height:9px; border-radius:50%; flex:0 0 auto}
   .tx{flex:1; font-size:15px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
   .meta{font-size:11px; color:var(--muted); flex:0 0 auto}
+  .rowdel{position:absolute; top:0; right:0; bottom:0; width:112px; border:0; border-radius:0;
+    padding:0; margin:0; background:var(--haute); color:#fff; font-size:14px; font-weight:600; z-index:0}
   .empty{padding:20px 16px; color:var(--muted)}
   .sheetlink{display:block; text-align:center; padding:12px; color:var(--muted); font-size:14px;
     text-decoration:none; border-top:1px solid var(--line)}
@@ -99,6 +103,7 @@
     return String(v).trim();
   }
 
+  var CURRENT = [];
   function render(rows){
     var items = [];
     for (var i=1;i<rows.length;i++){
@@ -106,15 +111,45 @@
       var tache = (r[0]||"").toString().trim(); if(!tache) continue;
       var etat = (r[1]||"").toString().toLowerCase();
       if (etat.indexOf("termin")!==-1 || etat.indexOf("fait")!==-1) continue;
-      items.push({tache:tache, prop:(r[2]||"").toString(), date:fmtDate(r[3]), prio:(r[4]||"").toString()});
+      items.push({row:i+1, tache:tache, prop:(r[2]||"").toString(), date:fmtDate(r[3]), prio:(r[4]||"").toString()});
     }
     items.sort(function(a,b){ return (ORDER[a.prio]==null?9:ORDER[a.prio])-(ORDER[b.prio]==null?9:ORDER[b.prio]); });
+    CURRENT = items;
     document.getElementById("count").textContent = items.length;
-    var html = items.map(function(it){
-      return '<div class="item"><span class="dot" style="background:'+(COLOR[it.prio]||"#888")+'"></span>'
-        + '<span class="tx">'+esc(it.tache)+'</span><span class="meta">'+(it.date?"📅 "+esc(it.date)+" · ":"")+esc(it.prop)+'</span></div>';
+    var html = items.map(function(it, idx){
+      return '<div class="item">'
+        + '<div class="body">'
+        + '<span class="dot" style="background:'+(COLOR[it.prio]||"#888")+'"></span>'
+        + '<span class="tx">'+esc(it.tache)+'</span>'
+        + '<span class="meta">'+(it.date?"📅 "+esc(it.date)+" · ":"")+esc(it.prop)+'</span>'
+        + '</div>'
+        + '<button class="rowdel" data-idx="'+idx+'">Supprimer</button>'
+        + '</div>';
     }).join("");
     document.getElementById("list").innerHTML = html || '<div class="empty">Rien à faire 🎉</div>';
+    attachSwipe();
+  }
+
+  function attachSwipe(){
+    var open = null; // le .body actuellement ouvert
+    var items = document.querySelectorAll("#list .item");
+    items.forEach(function(it){
+      var body = it.querySelector(".body");
+      var del = it.querySelector(".rowdel");
+      if(!body || !del) return;
+      var startX=0, cur=0, drag=false, isOpen=false;
+      function setX(x){ body.style.transform = "translateX("+x+"px)"; }
+      function openRow(){ isOpen=true; setX(-112); if(open && open!==body){ open.style.transform="translateX(0)"; } open=body; }
+      function closeRow(){ isOpen=false; setX(0); if(open===body) open=null; }
+      body.addEventListener("pointerdown", function(e){ startX=e.clientX; cur=isOpen?-112:0; drag=true; body.style.transition="none"; try{body.setPointerCapture(e.pointerId);}catch(_){} });
+      body.addEventListener("pointermove", function(e){ if(!drag) return; var dx=e.clientX-startX; var base=isOpen?-112:0; cur=Math.min(0,Math.max(-112, base+dx)); setX(cur); });
+      body.addEventListener("pointerup", function(){ if(!drag) return; drag=false; body.style.transition="transform .15s ease"; if(cur < -56) openRow(); else closeRow(); });
+      body.addEventListener("pointercancel", function(){ drag=false; body.style.transition="transform .15s ease"; closeRow(); });
+      del.addEventListener("click", function(){
+        var it2 = CURRENT[+del.dataset.idx];
+        if(it2) doDelete(it2.row, it2.tache, document.getElementById("status"));
+      });
+    });
   }
 
   function load(){
