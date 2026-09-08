@@ -31,6 +31,14 @@
   select{flex:1; font-size:15px; padding:11px; border-radius:12px; border:1px solid var(--line);
     background:#0f1115; color:var(--txt)}
   #status{min-height:20px; font-size:14px; color:var(--muted); text-align:center; margin-top:4px}
+  .hint{font-size:12px; color:var(--muted); text-align:center; margin-top:6px; opacity:.8}
+  #confirm{margin-top:8px}
+  #confirm:empty{margin:0}
+  .cfTitle{font-size:14px; margin:4px 0 6px; text-align:center}
+  .cfRow{display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--line)}
+  .cfTx{flex:1; font-size:14px}
+  .cfDel{background:var(--haute); font-size:14px; padding:8px 12px; width:auto; margin:0; border-radius:10px}
+  .cfCancel{background:#3a3f49; font-size:14px; padding:10px; margin-top:8px; border-radius:10px}
   .listwrap{flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:4px 0 16px}
   .item{display:flex; align-items:center; gap:10px; padding:9px 16px; border-bottom:1px solid var(--line)}
   .dot{width:9px; height:9px; border-radius:50%; flex:0 0 auto}
@@ -59,6 +67,8 @@
     </div>
     <button id="go">Ajouter au Sheet</button>
     <div id="status"></div>
+    <div id="confirm"></div>
+    <div class="hint">Astuce : dis « urgent » → priorité Haute. Dis « supprime &lt;tâche&gt; » pour l'effacer.</div>
   </div>
 </header>
 <div class="listwrap" id="list"><div class="empty">Chargement…</div></div>
@@ -127,20 +137,69 @@
     rec.start();
   });
 
-  document.getElementById("go").addEventListener("click", function(){
-    var t = document.getElementById("t").value.trim();
-    var s = document.getElementById("status");
-    if(!t){ s.textContent="Rien à ajouter"; return; }
-    if(!TOKEN){ s.textContent="Ouvre via l'icône « Parler » (jeton manquant)"; return; }
+  var DEL = /^(supprim\w*|enlev\w*|enlève|retir\w*|effac\w*)\s+(.+)$/i;
+
+  function addTask(t, s){
     var p = { token:TOKEN, tache:t, priorite:document.getElementById("prio").value, proprietaire:document.getElementById("own").value };
     s.textContent="Ajout en cours…";
     fetch(EXEC, {method:"POST", body:JSON.stringify(p)})
       .then(function(r){return r.json();})
       .then(function(r){
         if(r.ok){ s.textContent="Ajoutée ✅"; document.getElementById("t").value=""; load(); }
-        else { s.textContent="Erreur : "+r.error; }
+        else s.textContent="Erreur : "+r.error;
       })
       .catch(function(e){ s.textContent="Erreur réseau : "+e.message; });
+  }
+
+  function askDelete(q, s){
+    s.textContent="Recherche de « "+q+" »…";
+    fetch(EXEC, {method:"POST", body:JSON.stringify({token:TOKEN, action:"search", match:q})})
+      .then(function(r){return r.json();})
+      .then(function(r){
+        if(!r.ok){ s.textContent="Erreur : "+r.error; return; }
+        if(!r.matches.length){ s.textContent="Aucune tâche pour « "+q+" »"; return; }
+        showConfirm(r.matches, s);
+      })
+      .catch(function(e){ s.textContent="Erreur réseau : "+e.message; });
+  }
+
+  function showConfirm(matches, s){
+    var box=document.getElementById("confirm"); box.innerHTML="";
+    s.textContent="";
+    var title=document.createElement("div"); title.className="cfTitle";
+    title.textContent = matches.length>1 ? "Supprimer laquelle ?" : "Supprimer cette tâche ?";
+    box.appendChild(title);
+    matches.forEach(function(m){
+      var row=document.createElement("div"); row.className="cfRow";
+      var lbl=document.createElement("span"); lbl.className="cfTx"; lbl.textContent=m.tache; row.appendChild(lbl);
+      var b=document.createElement("button"); b.className="cfDel"; b.textContent="Supprimer";
+      b.onclick=function(){ doDelete(m.row, m.tache, s); };
+      row.appendChild(b); box.appendChild(row);
+    });
+    var cancel=document.createElement("button"); cancel.className="cfCancel"; cancel.textContent="Annuler";
+    cancel.onclick=function(){ box.innerHTML=""; };
+    box.appendChild(cancel);
+  }
+
+  function doDelete(row, expect, s){
+    s.textContent="Suppression…";
+    fetch(EXEC, {method:"POST", body:JSON.stringify({token:TOKEN, action:"delete", row:row, expect:expect})})
+      .then(function(r){return r.json();})
+      .then(function(r){
+        document.getElementById("confirm").innerHTML="";
+        if(r.ok){ s.textContent="Supprimée ✅"; document.getElementById("t").value=""; load(); }
+        else s.textContent="Erreur : "+r.error;
+      })
+      .catch(function(e){ s.textContent="Erreur réseau : "+e.message; });
+  }
+
+  document.getElementById("go").addEventListener("click", function(){
+    var t = document.getElementById("t").value.trim();
+    var s = document.getElementById("status");
+    if(!t){ s.textContent="Rien à faire"; return; }
+    if(!TOKEN){ s.textContent="Ouvre via l'icône « Parler » (jeton manquant)"; return; }
+    var m = t.match(DEL);
+    if(m){ askDelete(m[2].trim(), s); } else { addTask(t, s); }
   });
 
   load();
