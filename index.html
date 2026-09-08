@@ -80,6 +80,14 @@
   if (new URLSearchParams(location.search).get("compact") === "1") document.body.classList.add("compact");
 
   function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+  function fmtDate(v){
+    if(!v) return "";
+    var d=new Date(v);
+    if(!isNaN(d.getTime()) && String(v).length>6){
+      return ("0"+d.getDate()).slice(-2)+"/"+("0"+(d.getMonth()+1)).slice(-2);
+    }
+    return String(v).trim();
+  }
 
   function render(rows){
     var items = [];
@@ -88,13 +96,13 @@
       var tache = (r[0]||"").toString().trim(); if(!tache) continue;
       var etat = (r[1]||"").toString().toLowerCase();
       if (etat.indexOf("termin")!==-1 || etat.indexOf("fait")!==-1) continue;
-      items.push({tache:tache, prop:(r[2]||"").toString(), prio:(r[4]||"").toString()});
+      items.push({tache:tache, prop:(r[2]||"").toString(), date:fmtDate(r[3]), prio:(r[4]||"").toString()});
     }
     items.sort(function(a,b){ return (ORDER[a.prio]==null?9:ORDER[a.prio])-(ORDER[b.prio]==null?9:ORDER[b.prio]); });
     document.getElementById("count").textContent = items.length;
     var html = items.map(function(it){
       return '<div class="item"><span class="dot" style="background:'+(COLOR[it.prio]||"#888")+'"></span>'
-        + '<span class="tx">'+esc(it.tache)+'</span><span class="meta">'+esc(it.prop)+'</span></div>';
+        + '<span class="tx">'+esc(it.tache)+'</span><span class="meta">'+(it.date?"📅 "+esc(it.date)+" · ":"")+esc(it.prop)+'</span></div>';
     }).join("");
     document.getElementById("list").innerHTML = html || '<div class="empty">Rien à faire 🎉</div>';
   }

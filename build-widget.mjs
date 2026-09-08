@@ -8,6 +8,15 @@ const COLOR = { "Haute": "#e5484d", "Moyenne": "#f5a623", "Basse": "#3fa45b" };
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
+function fmtDate(v) {
+  if (!v) return "";
+  const d = new Date(v);
+  if (!isNaN(d.getTime()) && String(v).length > 6) {
+    return String(d.getDate()).padStart(2, "0") + "/" + String(d.getMonth() + 1).padStart(2, "0");
+  }
+  return String(v).trim();
+}
+
 const res = await fetch(EXEC + "?json=1");
 const data = await res.json();
 const rows = (data && data.taches) || [];
@@ -19,13 +28,13 @@ for (let i = 1; i < rows.length; i++) {
   if (!tache) continue;
   const etat = String(r[1] || "").toLowerCase();
   if (etat.includes("termin") || etat.includes("fait")) continue;
-  items.push({ tache, prop: String(r[2] || ""), prio: String(r[4] || "") });
+  items.push({ tache, prop: String(r[2] || ""), date: fmtDate(r[3]), prio: String(r[4] || "") });
 }
 items.sort((a, b) => (ORDER[a.prio] ?? 9) - (ORDER[b.prio] ?? 9));
 
 const li = items.map((it) =>
   `<div class="item"><span class="dot" style="background:${COLOR[it.prio] || "#888"}"></span>`
-  + `<span class="tx">${esc(it.tache)}</span><span class="meta">${esc(it.prop)}</span></div>`
+  + `<span class="tx">${esc(it.tache)}</span><span class="meta">${it.date ? "📅 " + esc(it.date) + " · " : ""}${esc(it.prop)}</span></div>`
 ).join("") || `<div class="empty">Rien à faire 🎉</div>`;
 
 const now = new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Paris" });
