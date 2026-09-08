@@ -1,0 +1,37 @@
+name: Build widget list
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"   # toutes les ~15 min (GitHub peut retarder un peu)
+  workflow_dispatch: {}       # bouton manuel
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-widget
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Générer list.html
+        run: node build-widget.mjs
+      - name: Commit si changement
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ -n "$(git status --porcelain list.html)" ]; then
+            git add list.html
+            git commit -m "MAJ auto de la liste widget"
+            git push
+          else
+            echo "Pas de changement."
+          fi
