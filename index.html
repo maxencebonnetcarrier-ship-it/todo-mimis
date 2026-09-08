@@ -137,7 +137,7 @@
     rec.start();
   });
 
-  var DEL = /^(supprim\w*|enlev\w*|enlève|retir\w*|effac\w*)\s+(.+)$/i;
+  var DEL = /^(supprim\w*|enlev\w*|enlève|retir\w*|effac\w*|termin\w*|fini\w*)\s+(.+)$/i;
 
   function addTask(t, s){
     var p = { token:TOKEN, tache:t, priorite:document.getElementById("prio").value, proprietaire:document.getElementById("own").value };
