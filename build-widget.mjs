@@ -7,6 +7,7 @@ const ORDER = { "Haute": 0, "Moyenne": 1, "Basse": 2 };
 const COLOR = { "Haute": "#e5484d", "Moyenne": "#f5a623", "Basse": "#3fa45b" };
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const normOwner = (p) => p.replace(/\bmaxence\s+bonnet[- ]?carrier\b/gi, "Maxence").replace(/\bbonnet[- ]?carrier\b/gi, "").replace(/\s{2,}/g, " ").trim();
 
 function fmtDate(v) {
   if (!v) return "";
@@ -28,7 +29,7 @@ for (let i = 1; i < rows.length; i++) {
   if (!tache) continue;
   const etat = String(r[1] || "").toLowerCase();
   if (etat.includes("termin") || etat.includes("fait")) continue;
-  items.push({ tache, prop: String(r[2] || ""), date: fmtDate(r[3]), prio: String(r[4] || "") });
+  items.push({ tache, prop: normOwner(String(r[2] || "")), date: fmtDate(r[3]), prio: String(r[4] || "") });
 }
 items.sort((a, b) => (ORDER[a.prio] ?? 9) - (ORDER[b.prio] ?? 9));
 
@@ -53,7 +54,7 @@ const html = `<!doctype html>
   h1 .c{font-size:12px;color:#9aa0aa;font-weight:500}
   .item{display:flex;align-items:center;gap:9px;padding:5px 0;border-bottom:1px solid #2a2e37;font-size:13px}
   .dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto}
-  .tx{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tx{flex:1;white-space:normal;overflow-wrap:anywhere;line-height:1.25}
   .meta{font-size:11px;color:#9aa0aa;flex:0 0 auto}
   .empty{color:#9aa0aa;font-size:13px;padding:10px 0}
   .mic{display:block;text-align:center;text-decoration:none;background:#e5484d;color:#fff;
