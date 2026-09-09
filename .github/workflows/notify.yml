@@ -1,0 +1,20 @@
+name: Notification ntfy
+
+on:
+  schedule:
+    - cron: "0 6 * * *"     # ~8h à Paris (7h en hiver)
+  workflow_dispatch: {}      # bouton manuel pour tester
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Envoyer le rappel
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          NTFY_SERVER: ${{ secrets.NTFY_SERVER }}
+        run: node notify.mjs
