@@ -42,7 +42,8 @@
   .listwrap{flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:4px 0 16px}
   .item{position:relative; overflow:hidden; border-bottom:1px solid var(--line)}
   .body{display:flex; align-items:center; gap:10px; padding:9px 16px; background:var(--bg);
-    transition:transform .15s ease; touch-action:pan-y; position:relative; z-index:1}
+    transition:transform .15s ease; touch-action:pan-y; position:relative; z-index:1;
+    -webkit-user-select:none; user-select:none; -webkit-touch-callout:none}
   .dot{width:9px; height:9px; border-radius:50%; flex:0 0 auto}
   .tx{flex:1; font-size:15px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
   .meta{font-size:11px; color:var(--muted); flex:0 0 auto}
@@ -186,25 +187,18 @@
       var done = it.querySelector(".rowdone");
       var sno = it.querySelector(".rowsnooze");
       if(!body) return;
-      var startX=0, cur=0, drag=false, pos=0, moved=0, lp=null; // pos: -112 terminé · 0 · 112 demain ; lp: timer appui long
+      var startX=0, cur=0, drag=false, pos=0, moved=0; // pos: -112 terminé · 0 · 112 demain
       function setX(x){ body.style.transform = "translateX("+x+"px)"; }
       function openAt(p){ if(opened && opened!==body) opened.style.transform="translateX(0)"; pos=p; setX(p); opened = (p!==0)?body:null; }
-      function clearLp(){ if(lp){ clearTimeout(lp); lp=null; } }
-      body.addEventListener("pointerdown", function(e){
-        startX=e.clientX; cur=pos; drag=true; moved=0; body.style.transition="none";
-        try{body.setPointerCapture(e.pointerId);}catch(_){}
-        clearLp();
-        if(pos===0){ lp=setTimeout(function(){ lp=null; if(moved<8){ drag=false; openEditor(+body.parentNode.querySelector(".rowdone").dataset.idx); } }, 500); }
-      });
-      body.addEventListener("pointermove", function(e){ if(!drag) return; var dx=e.clientX-startX; moved=Math.max(moved,Math.abs(dx)); if(moved>=8) clearLp(); cur=Math.min(112,Math.max(-112, pos+dx)); setX(cur); });
+      body.addEventListener("pointerdown", function(e){ startX=e.clientX; cur=pos; drag=true; moved=0; body.style.transition="none"; try{body.setPointerCapture(e.pointerId);}catch(_){} });
+      body.addEventListener("pointermove", function(e){ if(!drag) return; var dx=e.clientX-startX; moved=Math.max(moved,Math.abs(dx)); cur=Math.min(112,Math.max(-112, pos+dx)); setX(cur); });
       body.addEventListener("pointerup", function(){
-        clearLp();
         if(!drag) return; drag=false; body.style.transition="transform .15s ease";
         if(cur < -56) openAt(-112);
         else if(cur > 56) openAt(112);
-        else openAt(0);
+        else { var wasOpen = (pos!==0); openAt(0); if(!wasOpen && moved < 8) openEditor(+body.parentNode.querySelector(".rowdone").dataset.idx); }
       });
-      body.addEventListener("pointercancel", function(){ clearLp(); drag=false; body.style.transition="transform .15s ease"; openAt(0); });
+      body.addEventListener("pointercancel", function(){ drag=false; body.style.transition="transform .15s ease"; openAt(0); });
       if(done) done.addEventListener("click", function(){ var it2=CURRENT[+done.dataset.idx]; if(it2) doDone(it2, document.getElementById("status")); });
       if(sno) sno.addEventListener("click", function(){ var it2=CURRENT[+sno.dataset.idx]; if(it2) doSnooze(it2, document.getElementById("status")); });
     });
