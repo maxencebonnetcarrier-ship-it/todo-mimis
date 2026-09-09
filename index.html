@@ -45,7 +45,7 @@
     transition:transform .15s ease; touch-action:pan-y; position:relative; z-index:1;
     -webkit-user-select:none; user-select:none; -webkit-touch-callout:none}
   .dot{width:9px; height:9px; border-radius:50%; flex:0 0 auto}
-  .tx{flex:1; font-size:15px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .tx{flex:1; font-size:15px; white-space:normal; overflow-wrap:anywhere; line-height:1.25}
   .meta{font-size:11px; color:var(--muted); flex:0 0 auto}
   .gear{flex:0 0 auto; border:0; background:transparent; color:var(--muted); font-size:17px;
     padding:2px 2px 2px 8px; margin:0; cursor:pointer; line-height:1}
@@ -152,6 +152,11 @@
   }
 
   var CURRENT = [];
+  // Affiche le prenom court : "Maxence Bonnet-Carrier" -> "Maxence" (et retire tout "Bonnet-Carrier" residuel).
+  function normOwner(p){
+    return p.replace(/\bmaxence\s+bonnet[- ]?carrier\b/gi, "Maxence")
+            .replace(/\bbonnet[- ]?carrier\b/gi, "").replace(/\s{2,}/g," ").trim();
+  }
   function render(rows){
     var items = [];
     for (var i=1;i<rows.length;i++){
@@ -159,7 +164,7 @@
       var tache = (r[0]||"").toString().trim(); if(!tache) continue;
       var etat = (r[1]||"").toString().toLowerCase();
       if (etat.indexOf("termin")!==-1 || etat.indexOf("fait")!==-1) continue;
-      items.push({row:i+1, tache:tache, etat:(r[1]||"").toString(), prop:(r[2]||"").toString(),
+      items.push({row:i+1, tache:tache, etat:(r[1]||"").toString(), prop:normOwner((r[2]||"").toString()),
         date:fmtDate(r[3]), dateISO:isoOf(r[3]), prio:(r[4]||"").toString()});
     }
     items.sort(function(a,b){ return (ORDER[a.prio]==null?9:ORDER[a.prio])-(ORDER[b.prio]==null?9:ORDER[b.prio]); });
@@ -296,20 +301,25 @@
 
   var DEL = /^(supprim\w*|enlev\w*|enlève|retir\w*|effac\w*|termin\w*|fini\w*)\s+(.+)$/i;
 
-  // Mots-cles dits en TETE de phrase : qui (marine/maxence/les deux) + priorite (priorite haute/moyenne/basse).
-  // Consommes uniquement en debut de libelle -> "acheter cadeau pour marine" n'est PAS impacte.
+  // Mots-cles dits N'IMPORTE OU dans la phrase : qui (marine/maxence/les deux) + priorite ("priorite haute/moyenne/basse").
+  // Le nom est detecte comme mot entier ou qu'il soit -> "ranger le garage marine" ou "rappeler a maxence" marchent.
+  // Une eventuelle preposition juste avant le nom (a/au/pour/de/chez/et/+/virgule) est retiree avec lui.
   // La date ("le 13", "demain"...) reste dans le texte : c'est le hub qui la parse et la retire.
   function extraitMotsCles(t){
-    var prio=null, prop=null, s=t.trim(), changed=true;
-    while(changed){
-      changed=false;
-      var m;
-      if(m=s.match(/^(maxence\s*(?:\+|et)\s*marine|marine\s*(?:\+|et)\s*maxence|les deux|nous deux|tous les deux)\b[\s,]*/i)){ prop="Maxence + Marine"; s=s.slice(m[0].length); changed=true; continue; }
-      if(m=s.match(/^marine\b[\s,]*/i)){ prop="Marine"; s=s.slice(m[0].length); changed=true; continue; }
-      if(m=s.match(/^maxence\b[\s,]*/i)){ prop="Maxence"; s=s.slice(m[0].length); changed=true; continue; }
-      if(m=s.match(/^priorit[ée]s?\s+(haute|moyenne|basse)\b[\s,]*/i)){ prio=m[1].charAt(0).toUpperCase()+m[1].slice(1).toLowerCase(); s=s.slice(m[0].length); changed=true; continue; }
-    }
-    return { tache:s.trim(), prio:prio, prop:prop };
+    var prio=null, prop=null, s=" "+t.trim()+" ";
+    var mp = s.match(/\bpriorit[ée]s?\s+(haute|moyenne|basse)\b/i);
+    if(mp){ prio = mp[1].charAt(0).toUpperCase()+mp[1].slice(1).toLowerCase(); s = s.replace(mp[0], " "); }
+    var both = /\b(maxence\s*(?:\+|et)\s*marine|marine\s*(?:\+|et)\s*maxence|les deux|nous deux|tous les deux)\b/i;
+    var hasMarine = /\bmarine\b/i.test(s), hasMaxence = /\bmaxence\b/i.test(s);
+    if(both.test(s) || (hasMarine && hasMaxence)) prop = "Maxence + Marine";
+    else if(hasMarine) prop = "Marine";
+    else if(hasMaxence) prop = "Maxence";
+    // retire les noms (+ preposition eventuelle qui precede)
+    s = s.replace(/\b(?:les deux|nous deux|tous les deux)\b/gi, " ");
+    s = s.replace(/(?:\s(?:[àa]|au|pour|de|chez|et)|\+|,)?\s*\bmaxence\b/gi, " ");
+    s = s.replace(/(?:\s(?:[àa]|au|pour|de|chez|et)|\+|,)?\s*\bmarine\b/gi, " ");
+    s = s.replace(/\s+([,.;:!?])/g, "$1").replace(/\s{2,}/g, " ").trim();
+    return { tache:s, prio:prio, prop:prop };
   }
 
   function addTask(t, s){
