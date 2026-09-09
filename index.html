@@ -46,11 +46,24 @@
   .dot{width:9px; height:9px; border-radius:50%; flex:0 0 auto}
   .tx{flex:1; font-size:15px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
   .meta{font-size:11px; color:var(--muted); flex:0 0 auto}
-  .rowdel{position:absolute; top:0; right:0; bottom:0; width:112px; border:0; border-radius:0;
-    padding:0; margin:0; background:var(--haute); color:#fff; font-size:14px; font-weight:600; z-index:0}
+  .rowdone{position:absolute; top:0; right:0; bottom:0; width:112px; border:0; border-radius:0;
+    padding:0; margin:0; background:var(--basse); color:#fff; font-size:14px; font-weight:600; z-index:0}
   .rowsnooze{position:absolute; top:0; left:0; bottom:0; width:112px; border:0; border-radius:0;
     padding:0; margin:0; background:var(--moyenne); color:#1c1c1e; font-size:14px; font-weight:600; z-index:0}
   .empty{padding:20px 16px; color:var(--muted)}
+  /* fiche d'edition (clic sur une tache) */
+  #modal{position:fixed; inset:0; background:rgba(0,0,0,.55); display:flex; align-items:flex-end; z-index:10}
+  #modal[hidden]{display:none}
+  .sheet{width:100%; background:var(--card); border-radius:18px 18px 0 0; padding:16px 16px 22px;
+    display:flex; flex-direction:column; gap:10px; max-height:88%; overflow-y:auto}
+  .mTitle{font-size:16px; font-weight:600; margin-bottom:2px}
+  .fld{display:flex; flex-direction:column; gap:5px; font-size:13px; color:var(--muted)}
+  .fld select, .fld input{font-size:16px; padding:11px; border-radius:12px; border:1px solid var(--line);
+    background:#0f1115; color:var(--txt); width:100%}
+  #mSave{background:var(--basse); font-weight:600}
+  #mDone{background:#2f6fdb; font-weight:600}
+  #mDel{background:var(--haute)}
+  #mCancel{background:#3a3f49}
   .sheetlink{display:block; text-align:center; padding:12px; color:var(--muted); font-size:14px;
     text-decoration:none; border-top:1px solid var(--line)}
   /* mode compact (tuile widget) : cacher les contrôles d'ajout */
@@ -77,6 +90,25 @@
   </div>
 </header>
 <div class="listwrap" id="list"><div class="empty">Chargement…</div></div>
+<div id="modal" hidden>
+  <div class="sheet">
+    <div class="mTitle" id="mTitle"></div>
+    <label class="fld">Priorité
+      <select id="mPrio"><option>Haute</option><option>Moyenne</option><option>Basse</option></select>
+    </label>
+    <label class="fld">Qui ?
+      <select id="mOwn"><option value="">—</option><option>Maxence</option><option>Marine</option><option>Maxence + Marine</option></select>
+    </label>
+    <label class="fld">Date butoir
+      <input type="date" id="mDate">
+    </label>
+    <button id="mSave">Enregistrer</button>
+    <button id="mDone">✅ Terminé (classé)</button>
+    <button id="mDel">Supprimer définitivement</button>
+    <button id="mCancel">Annuler</button>
+  </div>
+</div>
+
 <a class="sheetlink" id="sheet" href="https://docs.google.com/spreadsheets/d/1HxBL95w047MpT2EqbSjNVcW-_FJBUQH22PdxkjSfQ7o/edit" target="_blank" rel="noopener">✎ Ouvrir le Sheet (tout modifier)</a>
 
 <script>
@@ -104,6 +136,20 @@
     return String(v).trim();
   }
 
+  function isoOf(v){
+    if(!v) return "";
+    var d=new Date(v);
+    if(!isNaN(d.getTime()) && String(v).length>6){
+      return d.getFullYear()+"-"+("0"+(d.getMonth()+1)).slice(-2)+"-"+("0"+d.getDate()).slice(-2);
+    }
+    var m=String(v).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    return m ? m[3]+"-"+("0"+m[2]).slice(-2)+"-"+("0"+m[1]).slice(-2) : "";
+  }
+  function frOf(iso){
+    var p=String(iso||"").split("-");
+    return p.length===3 ? p[2]+"/"+p[1]+"/"+p[0] : "";
+  }
+
   var CURRENT = [];
   function render(rows){
     var items = [];
@@ -112,7 +158,8 @@
       var tache = (r[0]||"").toString().trim(); if(!tache) continue;
       var etat = (r[1]||"").toString().toLowerCase();
       if (etat.indexOf("termin")!==-1 || etat.indexOf("fait")!==-1) continue;
-      items.push({row:i+1, tache:tache, etat:(r[1]||"").toString(), prop:(r[2]||"").toString(), date:fmtDate(r[3]), prio:(r[4]||"").toString()});
+      items.push({row:i+1, tache:tache, etat:(r[1]||"").toString(), prop:(r[2]||"").toString(),
+        date:fmtDate(r[3]), dateISO:isoOf(r[3]), prio:(r[4]||"").toString()});
     }
     items.sort(function(a,b){ return (ORDER[a.prio]==null?9:ORDER[a.prio])-(ORDER[b.prio]==null?9:ORDER[b.prio]); });
     CURRENT = items;
@@ -125,7 +172,7 @@
         + '<span class="tx">'+esc(it.tache)+'</span>'
         + '<span class="meta">'+(it.date?"📅 "+esc(it.date)+" · ":"")+esc(it.prop)+'</span>'
         + '</div>'
-        + '<button class="rowdel" data-idx="'+idx+'">Supprimer</button>'
+        + '<button class="rowdone" data-idx="'+idx+'">✅ Terminé</button>'
         + '</div>';
     }).join("");
     document.getElementById("list").innerHTML = html || '<div class="empty">Rien à faire 🎉</div>';
@@ -138,35 +185,90 @@
     var items = document.querySelectorAll("#list .item");
     items.forEach(function(it){
       var body = it.querySelector(".body");
-      var del = it.querySelector(".rowdel");
+      var done = it.querySelector(".rowdone");
       var sno = it.querySelector(".rowsnooze");
       if(!body) return;
-      var startX=0, cur=0, drag=false, pos=0; // pos: -112 supprimer · 0 · 112 demain
+      var startX=0, cur=0, drag=false, pos=0, moved=0; // pos: -112 terminé · 0 · 112 demain
       function setX(x){ body.style.transform = "translateX("+x+"px)"; }
       function openAt(p){ if(opened && opened!==body) opened.style.transform="translateX(0)"; pos=p; setX(p); opened = (p!==0)?body:null; }
-      body.addEventListener("pointerdown", function(e){ startX=e.clientX; cur=pos; drag=true; body.style.transition="none"; try{body.setPointerCapture(e.pointerId);}catch(_){} });
-      body.addEventListener("pointermove", function(e){ if(!drag) return; var dx=e.clientX-startX; cur=Math.min(112,Math.max(-112, pos+dx)); setX(cur); });
-      body.addEventListener("pointerup", function(){ if(!drag) return; drag=false; body.style.transition="transform .15s ease"; if(cur < -56) openAt(-112); else if(cur > 56) openAt(112); else openAt(0); });
+      body.addEventListener("pointerdown", function(e){ startX=e.clientX; cur=pos; drag=true; moved=0; body.style.transition="none"; try{body.setPointerCapture(e.pointerId);}catch(_){} });
+      body.addEventListener("pointermove", function(e){ if(!drag) return; var dx=e.clientX-startX; moved=Math.max(moved,Math.abs(dx)); cur=Math.min(112,Math.max(-112, pos+dx)); setX(cur); });
+      body.addEventListener("pointerup", function(){
+        if(!drag) return; drag=false; body.style.transition="transform .15s ease";
+        if(cur < -56) openAt(-112);
+        else if(cur > 56) openAt(112);
+        else { var wasOpen = (pos!==0); openAt(0); if(!wasOpen && moved < 8) openEditor(+body.parentNode.querySelector(".rowdone").dataset.idx); }
+      });
       body.addEventListener("pointercancel", function(){ drag=false; body.style.transition="transform .15s ease"; openAt(0); });
-      if(del) del.addEventListener("click", function(){ var it2=CURRENT[+del.dataset.idx]; if(it2) doDelete(it2.row, it2.tache, document.getElementById("status")); });
+      if(done) done.addEventListener("click", function(){ var it2=CURRENT[+done.dataset.idx]; if(it2) doDone(it2, document.getElementById("status")); });
       if(sno) sno.addEventListener("click", function(){ var it2=CURRENT[+sno.dataset.idx]; if(it2) doSnooze(it2, document.getElementById("status")); });
     });
   }
 
-  function doSnooze(item, s){
+  // Le Apps Script ne sait pas modifier une ligne : on recree la tache avec les
+  // nouvelles valeurs, puis on supprime l'ancienne ligne.
+  function replaceTask(item, ch, s, okMsg){
     if(!TOKEN){ s.textContent="Ouvre via l'icône « Parler » (jeton manquant)"; return; }
-    s.textContent="Report à demain…";
-    var d=new Date(); d.setDate(d.getDate()+1);
-    var dd=("0"+d.getDate()).slice(-2)+"/"+("0"+(d.getMonth()+1)).slice(-2)+"/"+d.getFullYear();
-    fetch(EXEC,{method:"POST",body:JSON.stringify({token:TOKEN, tache:item.tache, proprietaire:item.prop, priorite:item.prio, etat:item.etat, dateLimite:dd})})
+    s.textContent="Mise à jour…";
+    var p = {
+      token: TOKEN,
+      tache: item.tache,
+      proprietaire: (ch.prop != null ? ch.prop : item.prop),
+      priorite: (ch.prio != null ? ch.prio : item.prio),
+      etat: (ch.etat != null ? ch.etat : item.etat),
+      dateLimite: frOf(ch.dateISO != null ? ch.dateISO : item.dateISO)
+    };
+    fetch(EXEC,{method:"POST",body:JSON.stringify(p)})
       .then(function(r){return r.json();})
       .then(function(r){
         if(!r.ok) throw new Error(r.error||"ajout");
         return fetch(EXEC,{method:"POST",body:JSON.stringify({token:TOKEN, action:"delete", row:item.row, expect:item.tache})}).then(function(x){return x.json();});
       })
-      .then(function(r2){ s.textContent=(r2 && !r2.ok) ? ("Reportée mais ancienne restée : "+r2.error) : "Reportée à demain ✅"; load(); })
+      .then(function(r2){ s.textContent=(r2 && !r2.ok) ? ("Modifiée mais ancienne ligne restée : "+r2.error) : okMsg; load(); })
       .catch(function(e){ s.textContent="Erreur : "+e.message; });
   }
+
+  function doSnooze(item, s){
+    var d=new Date(); d.setDate(d.getDate()+1);
+    var iso=d.getFullYear()+"-"+("0"+(d.getMonth()+1)).slice(-2)+"-"+("0"+d.getDate()).slice(-2);
+    replaceTask(item, {dateISO:iso}, s, "Reportée à demain ✅");
+  }
+
+  function doDone(item, s){
+    replaceTask(item, {etat:"Terminé"}, s, "Terminée et classée ✅");
+  }
+
+  // Fiche d'edition : clic sur une tache
+  var EDIT = null;
+  function openEditor(idx){
+    var it = CURRENT[idx]; if(!it) return;
+    EDIT = it;
+    document.getElementById("mTitle").textContent = it.tache;
+    document.getElementById("mPrio").value = (ORDER[it.prio]!=null ? it.prio : "Moyenne");
+    document.getElementById("mOwn").value = ["Maxence","Marine","Maxence + Marine"].indexOf(it.prop)!==-1 ? it.prop : "";
+    document.getElementById("mDate").value = it.dateISO || "";
+    document.getElementById("modal").hidden = false;
+  }
+  function closeEditor(){ document.getElementById("modal").hidden = true; EDIT = null; }
+
+  document.getElementById("mCancel").addEventListener("click", closeEditor);
+  document.getElementById("modal").addEventListener("click", function(e){ if(e.target.id==="modal") closeEditor(); });
+  document.getElementById("mSave").addEventListener("click", function(){
+    var it=EDIT; if(!it) return;
+    var ch = {
+      prio: document.getElementById("mPrio").value,
+      prop: document.getElementById("mOwn").value,
+      dateISO: document.getElementById("mDate").value
+    };
+    closeEditor();
+    replaceTask(it, ch, document.getElementById("status"), "Modifiée ✅");
+  });
+  document.getElementById("mDone").addEventListener("click", function(){
+    var it=EDIT; if(!it) return; closeEditor(); doDone(it, document.getElementById("status"));
+  });
+  document.getElementById("mDel").addEventListener("click", function(){
+    var it=EDIT; if(!it) return; closeEditor(); doDelete(it.row, it.tache, document.getElementById("status"));
+  });
 
   function load(){
     fetch(EXEC+"?json=1").then(function(r){return r.json();}).then(function(d){
