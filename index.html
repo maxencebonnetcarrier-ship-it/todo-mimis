@@ -47,6 +47,8 @@
   .dot{width:9px; height:9px; border-radius:50%; flex:0 0 auto}
   .tx{flex:1; font-size:15px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
   .meta{font-size:11px; color:var(--muted); flex:0 0 auto}
+  .gear{flex:0 0 auto; border:0; background:transparent; color:var(--muted); font-size:17px;
+    padding:2px 2px 2px 8px; margin:0; cursor:pointer; line-height:1}
   .rowdone{position:absolute; top:0; right:0; bottom:0; width:112px; border:0; border-radius:0;
     padding:0; margin:0; background:var(--basse); color:#fff; font-size:14px; font-weight:600; z-index:0}
   .rowsnooze{position:absolute; top:0; left:0; bottom:0; width:112px; border:0; border-radius:0;
@@ -170,6 +172,7 @@
         + '<span class="dot" style="background:'+(COLOR[it.prio]||"#888")+'"></span>'
         + '<span class="tx">'+esc(it.tache)+'</span>'
         + '<span class="meta">'+(it.date?"📅 "+esc(it.date)+" · ":"")+esc(it.prop)+'</span>'
+        + '<button class="gear" data-idx="'+idx+'">⚙️</button>'
         + '</div>'
         + '<button class="rowdone" data-idx="'+idx+'">✅ Terminé</button>'
         + '</div>';
@@ -186,7 +189,12 @@
       var body = it.querySelector(".body");
       var done = it.querySelector(".rowdone");
       var sno = it.querySelector(".rowsnooze");
+      var gear = it.querySelector(".gear");
       if(!body) return;
+      if(gear){
+        gear.addEventListener("pointerdown", function(e){ e.stopPropagation(); });
+        gear.addEventListener("click", function(e){ e.stopPropagation(); openEditor(+gear.dataset.idx); });
+      }
       var startX=0, cur=0, drag=false, pos=0, moved=0; // pos: -112 terminé · 0 · 112 demain
       function setX(x){ body.style.transform = "translateX("+x+"px)"; }
       function openAt(p){ if(opened && opened!==body) opened.style.transform="translateX(0)"; pos=p; setX(p); opened = (p!==0)?body:null; }
@@ -196,7 +204,7 @@
         if(!drag) return; drag=false; body.style.transition="transform .15s ease";
         if(cur < -56) openAt(-112);
         else if(cur > 56) openAt(112);
-        else { var wasOpen = (pos!==0); openAt(0); if(!wasOpen && moved < 8) openEditor(+body.parentNode.querySelector(".rowdone").dataset.idx); }
+        else openAt(0);
       });
       body.addEventListener("pointercancel", function(){ drag=false; body.style.transition="transform .15s ease"; openAt(0); });
       if(done) done.addEventListener("click", function(){ var it2=CURRENT[+done.dataset.idx]; if(it2) doDone(it2, document.getElementById("status")); });
@@ -288,8 +296,28 @@
 
   var DEL = /^(supprim\w*|enlev\w*|enlève|retir\w*|effac\w*|termin\w*|fini\w*)\s+(.+)$/i;
 
+  // Mots-cles dits en TETE de phrase : qui (marine/maxence/les deux) + priorite (priorite haute/moyenne/basse).
+  // Consommes uniquement en debut de libelle -> "acheter cadeau pour marine" n'est PAS impacte.
+  // La date ("le 13", "demain"...) reste dans le texte : c'est le hub qui la parse et la retire.
+  function extraitMotsCles(t){
+    var prio=null, prop=null, s=t.trim(), changed=true;
+    while(changed){
+      changed=false;
+      var m;
+      if(m=s.match(/^(maxence\s*(?:\+|et)\s*marine|marine\s*(?:\+|et)\s*maxence|les deux|nous deux|tous les deux)\b[\s,]*/i)){ prop="Maxence + Marine"; s=s.slice(m[0].length); changed=true; continue; }
+      if(m=s.match(/^marine\b[\s,]*/i)){ prop="Marine"; s=s.slice(m[0].length); changed=true; continue; }
+      if(m=s.match(/^maxence\b[\s,]*/i)){ prop="Maxence"; s=s.slice(m[0].length); changed=true; continue; }
+      if(m=s.match(/^priorit[ée]s?\s+(haute|moyenne|basse)\b[\s,]*/i)){ prio=m[1].charAt(0).toUpperCase()+m[1].slice(1).toLowerCase(); s=s.slice(m[0].length); changed=true; continue; }
+    }
+    return { tache:s.trim(), prio:prio, prop:prop };
+  }
+
   function addTask(t, s){
-    var p = { token:TOKEN, tache:t, priorite:document.getElementById("prio").value, proprietaire:document.getElementById("own").value };
+    var k = extraitMotsCles(t);
+    var tache = k.tache || t;
+    var prioSel = document.getElementById("prio").value;
+    var propSel = document.getElementById("own").value;
+    var p = { token:TOKEN, tache:tache, priorite:(k.prio || prioSel), proprietaire:(k.prop || propSel) };
     s.textContent="Ajout en cours…";
     fetch(EXEC, {method:"POST", body:JSON.stringify(p)})
       .then(function(r){return r.json();})
