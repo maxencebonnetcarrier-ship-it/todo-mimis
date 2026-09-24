@@ -7,8 +7,15 @@
 <style>
   :root{
     --bg:#14161a; --card:#1c1f26; --line:#2a2e37; --txt:#f2f3f5; --muted:#9aa0aa;
+    --field:#0f1115; --cancel:#3a3f49; --snoozetxt:#1c1c1e;
     --haute:#e5484d; --moyenne:#f5a623; --basse:#3fa45b;
   }
+  /* thème clair (body.light) */
+  body.light{
+    --bg:#f4f5f7; --card:#ffffff; --line:#d8dbe0; --txt:#1c1f26; --muted:#6b7280;
+    --field:#ffffff; --cancel:#e3e5ea; --snoozetxt:#1c1c1e;
+  }
+  body.light .cfCancel,body.light #mCancel{color:#1c1f26}
   *{box-sizing:border-box}
   html,body{margin:0;height:100%}
   body{
@@ -19,6 +26,10 @@
   header{padding:14px 16px 8px}
   h1{font-size:18px; margin:0 0 10px; display:flex; justify-content:space-between; align-items:center}
   h1 .count{font-size:14px; color:var(--muted); font-weight:500}
+  h1 .right{display:flex; align-items:center; gap:10px}
+  .themebtn{background:transparent; color:var(--muted); font-size:18px; padding:2px 4px;
+    width:auto; margin:0; border-radius:8px; line-height:1}
+  body.compact .themebtn{display:none}
   .controls{display:flex; flex-direction:column; gap:8px}
   button{font-size:17px; border:0; border-radius:14px; padding:14px; cursor:pointer; color:#fff}
   #mic{background:var(--haute); font-size:20px; font-weight:600}
@@ -26,10 +37,10 @@
   @keyframes pulse{50%{opacity:.6}}
   #go{background:var(--basse); font-weight:600}
   textarea{width:100%; font-size:17px; padding:11px; border-radius:12px; border:1px solid var(--line);
-    background:#0f1115; color:var(--txt); min-height:60px; resize:vertical}
+    background:var(--field); color:var(--txt); min-height:60px; resize:vertical}
   .row2{display:flex; gap:8px}
   select{flex:1; font-size:15px; padding:11px; border-radius:12px; border:1px solid var(--line);
-    background:#0f1115; color:var(--txt)}
+    background:var(--field); color:var(--txt)}
   #status{min-height:20px; font-size:14px; color:var(--muted); text-align:center; margin-top:4px}
   .hint{font-size:12px; color:var(--muted); text-align:center; margin-top:6px; opacity:.8}
   #confirm{margin-top:8px}
@@ -38,7 +49,7 @@
   .cfRow{display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--line)}
   .cfTx{flex:1; font-size:14px}
   .cfDel{background:var(--haute); font-size:14px; padding:8px 12px; width:auto; margin:0; border-radius:10px}
-  .cfCancel{background:#3a3f49; font-size:14px; padding:10px; margin-top:8px; border-radius:10px}
+  .cfCancel{background:var(--cancel); font-size:14px; padding:10px; margin-top:8px; border-radius:10px}
   .listwrap{flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:4px 0 16px}
   .item{position:relative; overflow:hidden; border-bottom:1px solid var(--line)}
   .body{display:flex; align-items:center; gap:10px; padding:9px 16px; background:var(--bg);
@@ -62,10 +73,10 @@
   .mTitle{font-size:16px; font-weight:600; margin-bottom:2px}
   .fld{display:flex; flex-direction:column; gap:5px; font-size:13px; color:var(--muted)}
   .fld select, .fld input{font-size:16px; padding:11px; border-radius:12px; border:1px solid var(--line);
-    background:#0f1115; color:var(--txt); width:100%}
+    background:var(--field); color:var(--txt); width:100%}
   #mSave{background:var(--basse); font-weight:600}
   #mDel{background:var(--haute)}
-  #mCancel{background:#3a3f49}
+  #mCancel{background:var(--cancel)}
   .sheetlink{display:block; text-align:center; padding:12px; color:var(--muted); font-size:14px;
     text-decoration:none; border-top:1px solid var(--line)}
   /* mode compact (tuile widget) : cacher les contrôles d'ajout */
@@ -78,7 +89,7 @@
 </head>
 <body>
 <header>
-  <h1><span>To-do des Mimis</span><span class="count" id="count"></span></h1>
+  <h1><span>To-do des Mimis</span><span class="right"><span class="count" id="count"></span><button id="theme" class="themebtn" title="Thème clair / sombre">🌙</button></span></h1>
   <div class="controls">
     <button id="mic">🎤 Parler</button>
     <textarea id="t" placeholder="Ex : Acheter du pain le 13"></textarea>
@@ -126,6 +137,26 @@
   var COLOR = { "Haute":"var(--haute)", "Moyenne":"var(--moyenne)", "Basse":"var(--basse)" };
 
   if (new URLSearchParams(location.search).get("compact") === "1") document.body.classList.add("compact");
+
+  // Thème clair / sombre : choix mémorisé (localStorage), sinon suit le réglage du système.
+  function applyTheme(mode){
+    document.body.classList.toggle("light", mode === "light");
+    var b = document.getElementById("theme");
+    if (b) b.textContent = (mode === "light") ? "☀️" : "🌙";
+  }
+  (function(){
+    var saved = null; try { saved = localStorage.getItem("mimi_theme"); } catch(e){}
+    if (!saved) {
+      saved = (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) ? "light" : "dark";
+    }
+    applyTheme(saved);
+    var b = document.getElementById("theme");
+    if (b) b.addEventListener("click", function(){
+      var next = document.body.classList.contains("light") ? "dark" : "light";
+      try { localStorage.setItem("mimi_theme", next); } catch(e){}
+      applyTheme(next);
+    });
+  })();
 
   function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
   function fmtDate(v){

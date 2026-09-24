@@ -59,6 +59,12 @@ const html = `<!doctype html>
   .empty{color:#9aa0aa;font-size:13px;padding:10px 0}
   .mic{display:block;text-align:center;text-decoration:none;background:#e5484d;color:#fff;
     font-size:16px;font-weight:600;padding:11px;border-radius:12px;margin:2px 0 10px}
+  /* thème clair : suit le réglage système du téléphone */
+  @media (prefers-color-scheme: light){
+    body{background:#f4f5f7;color:#1c1f26}
+    h1 .c,.meta,.empty{color:#6b7280}
+    .item{border-bottom-color:#d8dbe0}
+  }
 </style></head><body>
 <div class="card">
 <h1><span>To-do des Mimis</span><span class="c">${items.length} · ${now}</span></h1>
