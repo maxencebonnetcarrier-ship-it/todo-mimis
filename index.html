@@ -15,7 +15,7 @@
     --bg:#f4f5f7; --card:#ffffff; --line:#d8dbe0; --txt:#1c1f26; --muted:#6b7280;
     --field:#ffffff; --cancel:#e3e5ea; --snoozetxt:#1c1c1e;
   }
-  body.light .cfCancel,body.light #mCancel{color:#1c1f26}
+  body.light .cfCancel,body.light #mCancel,body.light #nClose{color:#1c1f26}
   *{box-sizing:border-box}
   html,body{margin:0;height:100%}
   body{
@@ -66,17 +66,19 @@
     padding:0; margin:0; background:var(--moyenne); color:#1c1c1e; font-size:14px; font-weight:600; z-index:0}
   .empty{padding:20px 16px; color:var(--muted)}
   /* fiche d'edition (clic sur une tache) */
-  #modal{position:fixed; inset:0; background:rgba(0,0,0,.55); display:flex; align-items:flex-end; z-index:10}
-  #modal[hidden]{display:none}
+  #modal,#nmodal{position:fixed; inset:0; background:rgba(0,0,0,.55); display:flex; align-items:flex-end; z-index:10}
+  #modal[hidden],#nmodal[hidden]{display:none}
   .sheet{width:100%; background:var(--card); border-radius:18px 18px 0 0; padding:16px 16px 22px;
     display:flex; flex-direction:column; gap:10px; max-height:88%; overflow-y:auto}
   .mTitle{font-size:16px; font-weight:600; margin-bottom:2px}
   .fld{display:flex; flex-direction:column; gap:5px; font-size:13px; color:var(--muted)}
   .fld select, .fld input{font-size:16px; padding:11px; border-radius:12px; border:1px solid var(--line);
     background:var(--field); color:var(--txt); width:100%}
-  #mSave{background:var(--basse); font-weight:600}
+  #mSave,#nSave{background:var(--basse); font-weight:600}
   #mDel{background:var(--haute)}
-  #mCancel{background:var(--cancel)}
+  #mCancel,#nClose{background:var(--cancel)}
+  #nTest{background:var(--moyenne); color:var(--snoozetxt)}
+  .nInfo{font-size:13px; color:var(--muted); line-height:1.4}
   .sheetlink{display:block; text-align:center; padding:12px; color:var(--muted); font-size:14px;
     text-decoration:none; border-top:1px solid var(--line)}
   /* mode compact (tuile widget) : cacher les contrôles d'ajout */
@@ -89,7 +91,7 @@
 </head>
 <body>
 <header>
-  <h1><span>To-do des Mimis</span><span class="right"><span class="count" id="count"></span><button id="theme" class="themebtn" title="Thème clair / sombre">🌙</button></span></h1>
+  <h1><span>To-do des Mimis</span><span class="right"><span class="count" id="count"></span><button id="bell" class="themebtn" title="Notifications">🔕</button><button id="theme" class="themebtn" title="Thème clair / sombre">🌙</button></span></h1>
   <div class="controls">
     <button id="mic">🎤 Parler</button>
     <textarea id="t" placeholder="Ex : Acheter du pain le 13"></textarea>
@@ -118,6 +120,24 @@
     <button id="mSave">Enregistrer</button>
     <button id="mDel">Supprimer définitivement</button>
     <button id="mCancel">Annuler</button>
+  </div>
+</div>
+<div id="nmodal" hidden>
+  <div class="sheet">
+    <div class="mTitle">🔔 Notifications</div>
+    <div class="nInfo">Ce téléphone prévient l'autre à chaque ajout, report, « terminé », modification ou suppression fait ici. Les deux sujets ntfy se lisent dans Apps Script → ⚙️ Paramètres du projet → Propriétés du script.</div>
+    <label class="fld">Je suis
+      <select id="nMoi"><option value="">—</option><option>Maxence</option><option>Marine</option></select>
+    </label>
+    <label class="fld">Sujet ntfy de Maxence
+      <input type="text" id="nMax" autocomplete="off" autocapitalize="off" spellcheck="false">
+    </label>
+    <label class="fld">Sujet ntfy de Marine
+      <input type="text" id="nMar" autocomplete="off" autocapitalize="off" spellcheck="false">
+    </label>
+    <button id="nSave">Enregistrer</button>
+    <button id="nTest">Envoyer un test à l'autre</button>
+    <button id="nClose">Fermer</button>
   </div>
 </div>
 
@@ -158,6 +178,40 @@
     });
   })();
 
+  // Notifications ntfy envoyees DEPUIS ce telephone, vers l'AUTRE personne seulement.
+  // Pourquoi d'ici et pas de Google : ntfy.sh compte son quota gratuit par adresse internet, et
+  // celles de Google sont partagees par des milliers de scripts (quota epuise, mesure le 07/10).
+  // Les sujets ntfy sont des secrets : ils restent dans ce telephone, jamais dans le depot public.
+  var NTFY = "https://ntfy.sh/";
+  var APP_URL = "https://maxencebonnetcarrier-ship-it.github.io/todo-mimis/";
+  var SUJET_OK = /^[A-Za-z0-9_-]{1,64}$/;
+  function lireLocal(k){ try { return localStorage.getItem(k) || ""; } catch(e){ return ""; } }
+  function notifCfg(){
+    var moi = lireLocal("mimi_moi");
+    var autre = moi === "Maxence" ? "Marine" : (moi === "Marine" ? "Maxence" : "");
+    var sujet = autre === "Marine" ? lireLocal("mimi_ntfy_marine") : (autre === "Maxence" ? lireLocal("mimi_ntfy_maxence") : "");
+    return { moi:moi, autre:autre, sujet:sujet, actif: !!(autre && SUJET_OK.test(sujet)) };
+  }
+  function majCloche(){ var b=document.getElementById("bell"); if(b) b.textContent = notifCfg().actif ? "🔔" : "🔕"; }
+  // Previent l'autre et ajoute le resultat au message d'etat. Ne bloque jamais l'action elle-meme.
+  function notifier(titre, message, s){
+    var c = notifCfg();
+    if(!c.actif) return Promise.resolve(false);
+    var accord = c.autre === "Marine" ? "prévenue" : "prévenu";
+    return fetch(NTFY, {method:"POST", body:JSON.stringify({topic:c.sujet, title:c.moi+" "+titre, message:message, tags:["memo"], click:APP_URL})})
+      .then(function(r){ if(!r.ok) throw new Error("ntfy a répondu "+r.status); if(s) s.textContent += " · "+c.autre+" "+accord+" 🔔"; return true; })
+      .catch(function(e){ if(s) s.textContent += " · ⚠️ "+c.autre+" non "+accord+" : "+e.message; return false; });
+  }
+  function guill(t){ return "« "+t+" »"; }
+  function jjmmIso(iso){ var p=String(iso||"").split("-"); return p.length===3 ? p[2]+"/"+p[1] : "aucune"; }
+  function detailsModif(item, ch){
+    var d=[];
+    if(ch.prio!=null && ch.prio!==item.prio) d.push("priorité "+(item.prio||"—")+" → "+ch.prio);
+    if(ch.prop!=null && ch.prop!==item.prop) d.push("qui : "+(item.prop||"—")+" → "+(ch.prop||"—"));
+    if(ch.dateISO!=null && ch.dateISO!==(item.dateISO||"")) d.push("📅 "+jjmmIso(item.dateISO)+" → "+jjmmIso(ch.dateISO));
+    return d;
+  }
+
   function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
   function fmtDate(v){
     if(!v) return "";
@@ -184,7 +238,10 @@
 
   var CURRENT = [];
   // Affiche le prenom court : "Maxence Bonnet-Carrier" -> "Maxence" (et retire tout "Bonnet-Carrier" residuel).
+  // Les deux prenoms ensemble, quelle que soit l'ecriture ("Maxence Bonnet-Carrier Marine"...),
+  // donnent "Maxence + Marine" : le choix exact du menu de la fiche.
   function normOwner(p){
+    if (/\bmaxence\b/i.test(p) && /\bmarine\b/i.test(p)) return "Maxence + Marine";
     return p.replace(/\bmaxence\s+bonnet[- ]?carrier\b/gi, "Maxence")
             .replace(/\bbonnet[- ]?carrier\b/gi, "").replace(/\s{2,}/g," ").trim();
   }
@@ -196,7 +253,8 @@
       var etat = (r[1]||"").toString().toLowerCase();
       if (etat.indexOf("termin")!==-1 || etat.indexOf("fait")!==-1) continue;
       items.push({row:i+1, tache:tache, etat:(r[1]||"").toString(), prop:normOwner((r[2]||"").toString()),
-        date:fmtDate(r[3]), dateISO:isoOf(r[3]), prio:(r[4]||"").toString()});
+        date:fmtDate(r[3]), dateISO:isoOf(r[3]), prio:(r[4]||"").toString(),
+        liens:(r[5]||"").toString(), notes:(r[6]||"").toString()});
     }
     items.sort(function(a,b){ return (ORDER[a.prio]==null?9:ORDER[a.prio])-(ORDER[b.prio]==null?9:ORDER[b.prio]); });
     CURRENT = items;
@@ -250,7 +308,9 @@
 
   // Le Apps Script ne sait pas modifier une ligne : on recree la tache avec les
   // nouvelles valeurs, puis on supprime l'ancienne ligne.
-  function replaceTask(item, ch, s, okMsg){
+  // Liens et Notes sont recopies tels quels : sinon ils disparaissent avec l'ancienne ligne.
+  // notif (facultatif) = {titre, message} envoye a l'autre une fois la tache recreee.
+  function replaceTask(item, ch, s, okMsg, notif){
     if(!TOKEN){ s.textContent="Ouvre via l'icône « Parler » (jeton manquant)"; return; }
     s.textContent="Mise à jour…";
     var p = {
@@ -259,7 +319,9 @@
       proprietaire: (ch.prop != null ? ch.prop : item.prop),
       priorite: (ch.prio != null ? ch.prio : item.prio),
       etat: (ch.etat != null ? ch.etat : item.etat),
-      dateLimite: frOf(ch.dateISO != null ? ch.dateISO : item.dateISO)
+      dateLimite: frOf(ch.dateISO != null ? ch.dateISO : item.dateISO),
+      liens: item.liens || "",
+      notes: item.notes || ""
     };
     fetch(EXEC,{method:"POST",body:JSON.stringify(p)})
       .then(function(r){return r.json();})
@@ -267,28 +329,44 @@
         if(!r.ok) throw new Error(r.error||"ajout");
         return fetch(EXEC,{method:"POST",body:JSON.stringify({token:TOKEN, action:"delete", row:item.row, expect:item.tache})}).then(function(x){return x.json();});
       })
-      .then(function(r2){ s.textContent=(r2 && !r2.ok) ? ("Modifiée mais ancienne ligne restée : "+r2.error) : okMsg; load(); })
+      .then(function(r2){
+        s.textContent=(r2 && !r2.ok) ? ("Modifiée mais ancienne ligne restée : "+r2.error) : okMsg; load();
+        if(notif) notifier(notif.titre, notif.message, s);
+      })
       .catch(function(e){ s.textContent="Erreur : "+e.message; });
   }
 
   function doSnooze(item, s){
     var d=new Date(); d.setDate(d.getDate()+1);
     var iso=d.getFullYear()+"-"+("0"+(d.getMonth()+1)).slice(-2)+"-"+("0"+d.getDate()).slice(-2);
-    replaceTask(item, {dateISO:iso}, s, "Reportée à demain ✅");
+    replaceTask(item, {dateISO:iso}, s, "Reportée à demain ✅",
+      {titre:"a reporté une tâche", message:guill(item.tache)+" → demain ("+jjmmIso(iso)+")"});
   }
 
   function doDone(item, s){
-    replaceTask(item, {etat:"Terminé"}, s, "Terminée et classée ✅");
+    replaceTask(item, {etat:"Terminé"}, s, "Terminée et classée ✅",
+      {titre:"a terminé une tâche", message:"✅ "+guill(item.tache)});
   }
 
   // Fiche d'edition : clic sur une tache
   var EDIT = null;
+  var OWN_HORS_MENU = null; // choix ajoute le temps d'une fiche pour un proprietaire absent du menu
   function openEditor(idx){
     var it = CURRENT[idx]; if(!it) return;
     EDIT = it;
     document.getElementById("mTitle").textContent = it.tache;
     document.getElementById("mPrio").value = (ORDER[it.prio]!=null ? it.prio : "Moyenne");
-    document.getElementById("mOwn").value = ["Maxence","Marine","Maxence + Marine"].indexOf(it.prop)!==-1 ? it.prop : "";
+    // Un proprietaire absent du menu (tape a la main dans le Sheet) ne doit pas devenir "—" :
+    // sinon "Enregistrer" l'efface. On l'ajoute au menu le temps de cette fiche.
+    var own = document.getElementById("mOwn");
+    if(OWN_HORS_MENU){ own.removeChild(OWN_HORS_MENU); OWN_HORS_MENU = null; }
+    own.value = it.prop;
+    if(own.value !== it.prop){
+      OWN_HORS_MENU = document.createElement("option");
+      OWN_HORS_MENU.value = it.prop; OWN_HORS_MENU.textContent = it.prop;
+      own.appendChild(OWN_HORS_MENU);
+      own.value = it.prop;
+    }
     document.getElementById("mDate").value = it.dateISO || "";
     document.getElementById("modal").hidden = false;
   }
@@ -304,7 +382,9 @@
       dateISO: document.getElementById("mDate").value
     };
     closeEditor();
-    replaceTask(it, ch, document.getElementById("status"), "Modifiée ✅");
+    var d = detailsModif(it, ch);
+    replaceTask(it, ch, document.getElementById("status"), "Modifiée ✅",
+      d.length ? {titre:"a modifié une tâche", message:guill(it.tache)+" — "+d.join(" · ")} : null);
   });
   document.getElementById("mDel").addEventListener("click", function(){
     var it=EDIT; if(!it) return; closeEditor(); doDelete(it.row, it.tache, document.getElementById("status"));
@@ -363,7 +443,11 @@
     fetch(EXEC, {method:"POST", body:JSON.stringify(p)})
       .then(function(r){return r.json();})
       .then(function(r){
-        if(r.ok){ s.textContent="Ajoutée ✅"; document.getElementById("t").value=""; load(); }
+        if(r.ok){
+          s.textContent="Ajoutée ✅"; document.getElementById("t").value=""; load();
+          notifier("a ajouté une tâche", guill(tache)+(p.proprietaire ? " — pour "+p.proprietaire : "")
+            +(p.priorite==="Haute" ? " · priorité haute" : ""), s);
+        }
         else s.textContent="Erreur : "+r.error;
       })
       .catch(function(e){ s.textContent="Erreur réseau : "+e.message; });
@@ -405,7 +489,10 @@
       .then(function(r){return r.json();})
       .then(function(r){
         document.getElementById("confirm").innerHTML="";
-        if(r.ok){ s.textContent="Supprimée ✅"; document.getElementById("t").value=""; load(); }
+        if(r.ok){
+          s.textContent="Supprimée ✅"; document.getElementById("t").value=""; load();
+          notifier("a supprimé une tâche", "🗑️ "+guill(expect), s);
+        }
         else s.textContent="Erreur : "+r.error;
       })
       .catch(function(e){ s.textContent="Erreur réseau : "+e.message; });
@@ -420,6 +507,44 @@
     if(m){ askDelete(m[2].trim(), s); } else { addTask(t, s); }
   });
 
+  // Reglages des notifications (bouton 🔔/🔕) : qui utilise ce telephone + les deux sujets ntfy.
+  function ouvrirNotif(){
+    document.getElementById("nMoi").value = lireLocal("mimi_moi");
+    document.getElementById("nMax").value = lireLocal("mimi_ntfy_maxence");
+    document.getElementById("nMar").value = lireLocal("mimi_ntfy_marine");
+    document.getElementById("nmodal").hidden = false;
+  }
+  function fermerNotif(){ document.getElementById("nmodal").hidden = true; }
+  document.getElementById("bell").addEventListener("click", ouvrirNotif);
+  document.getElementById("nClose").addEventListener("click", fermerNotif);
+  document.getElementById("nmodal").addEventListener("click", function(e){ if(e.target.id==="nmodal") fermerNotif(); });
+  document.getElementById("nSave").addEventListener("click", function(){
+    var s = document.getElementById("status");
+    var moi = document.getElementById("nMoi").value;
+    var max = document.getElementById("nMax").value.trim();
+    var mar = document.getElementById("nMar").value.trim();
+    if((max && !SUJET_OK.test(max)) || (mar && !SUJET_OK.test(mar))){
+      fermerNotif(); s.textContent="Sujet ntfy invalide : lettres, chiffres, - et _ seulement (rien n'est enregistré)"; return;
+    }
+    try {
+      localStorage.setItem("mimi_moi", moi);
+      localStorage.setItem("mimi_ntfy_maxence", max);
+      localStorage.setItem("mimi_ntfy_marine", mar);
+    } catch(e){ fermerNotif(); s.textContent="Impossible d'enregistrer sur ce téléphone : "+e.message; return; }
+    fermerNotif(); majCloche();
+    var c = notifCfg();
+    s.textContent = c.actif ? "Notifications : ce téléphone prévient "+c.autre+" 🔔" : "Notifications désactivées sur ce téléphone";
+  });
+  document.getElementById("nTest").addEventListener("click", function(){
+    var s = document.getElementById("status");
+    var c = notifCfg();
+    fermerNotif();
+    if(!c.actif){ s.textContent="Règle d'abord « Je suis » et le sujet de l'autre, puis Enregistrer"; return; }
+    s.textContent="Test envoyé à "+c.autre+"…";
+    notifier("t'envoie un test", "Si tu lis ceci, les notifications de la to-do marchent 🎉", s);
+  });
+
+  majCloche();
   load();
   setInterval(load, 60000);
 </script>

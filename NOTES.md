@@ -17,7 +17,14 @@ Bloc-notes entre sessions : où on en est, comment ça marche, ce qui reste.
 - `index.html` : la page complète (voix, ajout, liste, gestes, fiche d'édition).
 - `list.html` : page figée pour la tuile widget, régénérée par `build-widget.mjs`
   via le workflow `build-widget.yml` (toutes les ~15 min).
-- `notify.mjs` + `notify.yml` : rappel ntfy quotidien (~8h Paris).
+- **Notifications** (mode d'emploi : `NOTIFICATIONS.md`, à côté de `Code.gs`) :
+  - **les changements faits sur la page** partent du téléphone, vers l'autre personne seulement
+    (`notifier()` dans `index.html`, réglages par le bouton 🔔/🔕). Les sujets ntfy sont stockés
+    dans le téléphone (`mimi_moi`, `mimi_ntfy_maxence`, `mimi_ntfy_marine`), jamais dans le dépôt ;
+  - **le rappel du matin** part de Google (`Notifications.gs`) avec des essais toutes les 15 min.
+  L'ancien `notify.mjs` + `notify.yml` a été retiré le 2026-10-07 pour deux raisons. Le cron GitHub
+  le lançait vers 14h30 au lieu de 8h. Et il lisait les dates en UTC : une échéance du 09/10 était
+  vue comme le 08/10.
 
 ## Fait
 
@@ -29,21 +36,60 @@ Bloc-notes entre sessions : où on en est, comment ça marche, ce qui reste.
 - **Clic sur une tâche** : fiche d'édition (priorité, qui, date butoir),
   plus les boutons Terminé et Supprimer définitivement.
 - Tuile widget + robot de régénération.
-- Notification ntfy quotidienne des tâches en retard ou dues aujourd'hui.
+- Notifications push ntfy, côté hub (2026-10-07) : rappel du matin (en retard + du jour,
+  chacun les siennes). En moins de 5 min, **chaque changement** est signalé aux personnes
+  concernées : ajout, report, priorité, état, réattribution, terminé, supprimé.
+  Testée hors ligne (`node test-notifications.js`, 25 cas). Le fichier `Notifications.gs` a été
+  ajouté au projet Apps Script le 2026-10-07, et le contenu enregistré est identique au fichier
+  local. Sujets ntfy (`NTFY_TOPIC_MAXENCE`, `NTFY_TOPIC_MARINE`) saisis le même jour : ils ont été
+  tirés au hasard et sont lisibles seulement dans Paramètres du projet → Propriétés du script.
+  **Actif depuis le 2026-10-07 à 17:55**. Journal de `notifInstaller` : 2 déclencheurs
+  (`notifRappelDuJour` et `notifChangements`), sujets Maxence + Marine, 10 tâches mémorisées.
+  Il reste à abonner les deux téléphones dans l'appli ntfy.
+  Essai réel du 2026-10-07 à 18:20 : une date d'essai a été mise dans une case vide (D10), puis
+  retirée. Elle a été repérée par la vérification de 18:22, et le message **est parti vers
+  Maxence**. **Envoi à Marine : 2 échecs sur 2** (17:50 et 18:23), toujours « Address unavailable:
+  https://ntfy.sh/ », après environ 50 s d'attente, et toujours en 2e envoi, après Maxence.
+  **Cause trouvée (diagnostic de 18:39, Marine envoyée en premier)** : ni le sujet de Marine, ni
+  l'ordre des envois. ntfy.sh a répondu 429 « daily message quota reached ». Son quota gratuit
+  (250/jour) est compté **par adresse IP**, et Apps Script sort par des adresses partagées avec
+  d'autres scripts, déjà à court de quota. Un compte ntfy gratuit ne change rien. Un 2e essai
+  automatique n'y changerait rien non plus.
+  **Décision de Maxence (2026-10-07, soir)** : les changements partent des **téléphones**, et seul
+  l'autre est prévenu. Le rappel de 8h reste chez Google, avec des essais répétés. Codé et testé
+  (page 15/15, Google 33/33, mutations détectées). Le format d'envoi depuis un navigateur a été
+  vérifié pour de vrai (HTTP 200, accents intacts).
+  **Côté Google : installé le 2026-10-07 à 19:54.** Le fichier recollé est identique au local
+  (615 lignes). Journal de `notifInstaller` : 2 anciens déclencheurs supprimés, il ne reste que
+  `notifRappelDuJour` (toutes les 15 min), `changementsParGoogle:false`, sujets Maxence + Marine.
+  **Côté page : pas encore publiée.** Tant qu'elle n'est pas poussée sur GitHub, les téléphones
+  gardent l'ancienne page, qui n'envoie rien. Il reste aussi à régler les deux téléphones. Limite assumée : une modification tapée directement dans le Sheet ne
+  prévient personne.
+- **Fiche ⚙️ : le propriétaire n'est plus effacé** (2026-10-07). « Maxence Bonnet-Carrier Marine »
+  s'affiche et s'enregistre comme « Maxence + Marine » (`normOwner`). Un propriétaire tapé à la
+  main, absent du menu, est gardé. Preuve : `node test-index.js`, 2 cas rouges avant la
+  correction et 8/8 verts après. **Pas encore publié.**
+- **Liens et Notes conservés** (2026-10-07) : « Demain », « Terminé » et l'édition ⚙️ recréent
+  la ligne. Avant, ils perdaient ces deux colonnes. `replaceTask` les recopie désormais.
+  Preuve : `node test-index.js` (5 cas), rouge avant la correction et vert après.
+  Le vrai hub écrit bien `liens` et `notes` : c'est lu dans son code (`appendTask_`, l. 105-106).
+  Ce n'est pas encore vérifié en écrivant dans le Sheet. **Pas encore publié.**
 
-## À faire côté Maxence (une seule fois, pour ntfy)
+## À faire côté Maxence
 
-1. Installer l'appli **ntfy** (iOS / Android).
-2. S'abonner à un sujet privé, par exemple `mimis-todo-<quelque-chose-au-hasard>`.
-   Le sujet est le seul secret : n'importe qui qui le connaît reçoit les messages.
-3. Dans GitHub : *Settings → Secrets and variables → Actions → New repository secret*,
-   nom `NTFY_TOPIC`, valeur = le sujet choisi.
-   (Optionnel `NTFY_SERVER` si serveur ntfy auto-hébergé.)
-4. Tester : onglet *Actions → Notification ntfy → Run workflow*.
-   Sans tâche en retard ni due aujourd'hui, rien n'est envoyé (c'est voulu).
+1. Publier la page (push sur GitHub). C'est elle qui envoie les notifications des changements.
+2. Recoller `Notifications.gs` dans Apps Script et relancer `notifInstaller`. Ensuite, régler les
+   deux téléphones (🔔) et abonner chacun à son sujet dans ntfy. Voir `NOTIFICATIONS.md`.
+3. Couper l'ancien rappel GitHub : le push suffit, **ou** *Actions → Notification ntfy →
+   Disable workflow*. Le secret `NTFY_TOPIC` ne sert plus.
 
-## Idées pas encore faites
+## Améliorations repérées (revue du 2026-10-07, non faites)
 
+- **Jeton public** : la page servie par `GET /exec` (sans jeton) contient le jeton en clair, et
+  l'URL `/exec` est dans ce dépôt public. N'importe qui peut donc ajouter ou supprimer des tâches.
+- **Dates de la tuile un jour trop tôt** : `build-widget.mjs` tourne en UTC sur GitHub.
+  Il affiche 08/10 pour une échéance du 09/10, alors que la page affiche la bonne date.
+- **Tuile rarement à jour** : le cron « toutes les 15 min » tourne en réalité toutes les 3 à 6 h.
+- Widget iOS : `prenom()` réduit « Maxence + Marine » à « Maxence ».
 - Afficher en rouge les tâches en retard dans la liste et le widget.
-- Notification aussi quand quelqu'un ajoute une tâche pour l'autre.
 - Récurrence (tâches qui reviennent chaque semaine).

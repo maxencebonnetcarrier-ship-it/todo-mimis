@@ -20,7 +20,8 @@ commité est perdu.
 - `index.html` — la page complète : voix, ajout, liste, gestes, fiche d'édition.
 - `list.html` — page figée pour la tuile widget. **Générée**, ne pas éditer à la main.
 - `build-widget.mjs` — génère `list.html` (workflow toutes les ~15 min).
-- `notify.mjs` — rappel ntfy quotidien (workflow ~8h Paris).
+- `test-index.js` — test de la page sans navigateur ni réseau : `node test-index.js`.
+- Notifications : plus dans ce dépôt. Elles tournent dans le hub Apps Script (`Notifications.gs`).
 
 ## Règles
 
