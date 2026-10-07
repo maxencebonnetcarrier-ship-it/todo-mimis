@@ -62,26 +62,28 @@ Bloc-notes entre sessions : où on en est, comment ça marche, ce qui reste.
   **Côté Google : installé le 2026-10-07 à 19:54.** Le fichier recollé est identique au local
   (615 lignes). Journal de `notifInstaller` : 2 anciens déclencheurs supprimés, il ne reste que
   `notifRappelDuJour` (toutes les 15 min), `changementsParGoogle:false`, sujets Maxence + Marine.
-  **Côté page : pas encore publiée.** Tant qu'elle n'est pas poussée sur GitHub, les téléphones
-  gardent l'ancienne page, qui n'envoie rien. Il reste aussi à régler les deux téléphones. Limite assumée : une modification tapée directement dans le Sheet ne
-  prévient personne.
+  **Côté page : publiée le 2026-10-07 à 22:03 (heure de Paris)**. Commits `003d00f` (page) et
+  `d9f6ac8` (retrait de l'ancien rappel GitHub), poussés par la clé SSH `github-maxence`. Vérifiée
+  en ligne : bouton 🔔 présent, aucun jeton dans la page. Il reste à régler les deux téléphones.
+  Limite assumée : une modification tapée directement dans le Sheet ne prévient personne.
 - **Fiche ⚙️ : le propriétaire n'est plus effacé** (2026-10-07). « Maxence Bonnet-Carrier Marine »
   s'affiche et s'enregistre comme « Maxence + Marine » (`normOwner`). Un propriétaire tapé à la
   main, absent du menu, est gardé. Preuve : `node test-index.js`, 2 cas rouges avant la
-  correction et 8/8 verts après. **Pas encore publié.**
+  correction et 8/8 verts après. Publié le 2026-10-07 (`003d00f`).
 - **Liens et Notes conservés** (2026-10-07) : « Demain », « Terminé » et l'édition ⚙️ recréent
   la ligne. Avant, ils perdaient ces deux colonnes. `replaceTask` les recopie désormais.
   Preuve : `node test-index.js` (5 cas), rouge avant la correction et vert après.
   Le vrai hub écrit bien `liens` et `notes` : c'est lu dans son code (`appendTask_`, l. 105-106).
-  Ce n'est pas encore vérifié en écrivant dans le Sheet. **Pas encore publié.**
+  Ce n'est pas encore vérifié en écrivant dans le Sheet. Publié le 2026-10-07 (`003d00f`).
 
 ## À faire côté Maxence
 
-1. Publier la page (push sur GitHub). C'est elle qui envoie les notifications des changements.
-2. Recoller `Notifications.gs` dans Apps Script et relancer `notifInstaller`. Ensuite, régler les
-   deux téléphones (🔔) et abonner chacun à son sujet dans ntfy. Voir `NOTIFICATIONS.md`.
-3. Couper l'ancien rappel GitHub : le push suffit, **ou** *Actions → Notification ntfy →
-   Disable workflow*. Le secret `NTFY_TOPIC` ne sert plus.
+1. Régler les deux téléphones : ouvrir la page, bouton 🔕 → « Je suis » + les deux sujets →
+   Enregistrer, puis « Envoyer un test à l'autre ». Abonner chacun à son propre sujet dans ntfy.
+   Voir `NOTIFICATIONS.md`.
+2. Raccourci Siri de Marine : ajouter l'action qui prévient Maxence (`ios/README-iOS.md`, 3 bis).
+3. Le secret GitHub `NTFY_TOPIC` du dépôt ne sert plus : on peut le supprimer.
+   (Fait le 2026-10-07 : page publiée, `Notifications.gs` réinstallé, ancien rappel GitHub retiré.)
 
 ## Améliorations repérées (revue du 2026-10-07, non faites)
 
