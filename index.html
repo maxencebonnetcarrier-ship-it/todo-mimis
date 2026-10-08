@@ -124,8 +124,12 @@
 </div>
 <div id="nmodal" hidden>
   <div class="sheet">
-    <div class="mTitle">🔔 Notifications</div>
-    <div class="nInfo">Ce téléphone prévient l'autre à chaque ajout, report, « terminé », modification ou suppression fait ici. Les deux sujets ntfy se lisent dans Apps Script → ⚙️ Paramètres du projet → Propriétés du script.</div>
+    <div class="mTitle">🔔 Réglages de ce téléphone</div>
+    <label class="fld">Jeton de la to-do (nécessaire pour ajouter)
+      <input type="text" id="nTok" autocomplete="off" autocapitalize="off" spellcheck="false">
+    </label>
+    <div class="nInfo">Le jeton est la fin du lien de l'icône, après le #. Tu peux coller le lien entier.</div>
+    <div class="nInfo">Notifications : ce téléphone prévient l'autre à chaque ajout, report, « terminé », modification ou suppression fait ici. Les deux sujets ntfy se lisent dans Apps Script → ⚙️ Paramètres du projet → Propriétés du script.</div>
     <label class="fld">Je suis
       <select id="nMoi"><option value="">—</option><option>Maxence</option><option>Marine</option></select>
     </label>
@@ -153,6 +157,15 @@
     if (h) { TOKEN = h; try { localStorage.setItem("mimi_token", h); } catch(e){} }
     else { try { TOKEN = localStorage.getItem("mimi_token") || ""; } catch(e){} }
   })();
+  // Page ouverte sans # (bouton de la tuile widget, autre navigateur, telephone nettoye) :
+  // le jeton se colle dans les reglages 🔔, une fois par navigateur.
+  var MSG_JETON = "Jeton manquant : touche 🔔 (ou 🔕) en haut et colle le jeton de la to-do";
+  function jetonDe(saisie){ // accepte le jeton seul ou le lien complet .../#jeton
+    var t = String(saisie || "").trim();
+    var i = t.lastIndexOf("#"); if (i !== -1) t = t.slice(i + 1);
+    try { t = decodeURIComponent(t); } catch(e){}
+    return t.trim();
+  }
   var ORDER = { "Haute":0, "Moyenne":1, "Basse":2 };
   var COLOR = { "Haute":"var(--haute)", "Moyenne":"var(--moyenne)", "Basse":"var(--basse)" };
 
@@ -311,7 +324,7 @@
   // Liens et Notes sont recopies tels quels : sinon ils disparaissent avec l'ancienne ligne.
   // notif (facultatif) = {titre, message} envoye a l'autre une fois la tache recreee.
   function replaceTask(item, ch, s, okMsg, notif){
-    if(!TOKEN){ s.textContent="Ouvre via l'icône « Parler » (jeton manquant)"; return; }
+    if(!TOKEN){ s.textContent=MSG_JETON; return; }
     s.textContent="Mise à jour…";
     var p = {
       token: TOKEN,
@@ -502,13 +515,17 @@
     var t = document.getElementById("t").value.trim();
     var s = document.getElementById("status");
     if(!t){ s.textContent="Rien à faire"; return; }
-    if(!TOKEN){ s.textContent="Ouvre via l'icône « Parler » (jeton manquant)"; return; }
+    if(!TOKEN){ s.textContent=MSG_JETON; return; }
     var m = t.match(DEL);
     if(m){ askDelete(m[2].trim(), s); } else { addTask(t, s); }
   });
 
   // Reglages des notifications (bouton 🔔/🔕) : qui utilise ce telephone + les deux sujets ntfy.
   function ouvrirNotif(){
+    // Le jeton deja garde n'est jamais reaffiche en clair : champ vide = on le garde.
+    var tok = document.getElementById("nTok");
+    tok.value = "";
+    tok.placeholder = TOKEN ? "déjà enregistré ✔ (laisser vide pour le garder)" : "colle ici le jeton ou le lien de l'icône";
     document.getElementById("nMoi").value = lireLocal("mimi_moi");
     document.getElementById("nMax").value = lireLocal("mimi_ntfy_maxence");
     document.getElementById("nMar").value = lireLocal("mimi_ntfy_marine");
@@ -526,14 +543,21 @@
     if((max && !SUJET_OK.test(max)) || (mar && !SUJET_OK.test(mar))){
       fermerNotif(); s.textContent="Sujet ntfy invalide : lettres, chiffres, - et _ seulement (rien n'est enregistré)"; return;
     }
+    var nouveauJeton = jetonDe(document.getElementById("nTok").value);
     try {
+      if (nouveauJeton) localStorage.setItem("mimi_token", nouveauJeton);
       localStorage.setItem("mimi_moi", moi);
       localStorage.setItem("mimi_ntfy_maxence", max);
       localStorage.setItem("mimi_ntfy_marine", mar);
     } catch(e){ fermerNotif(); s.textContent="Impossible d'enregistrer sur ce téléphone : "+e.message; return; }
+    if (nouveauJeton) TOKEN = nouveauJeton;
     fermerNotif(); majCloche();
     var c = notifCfg();
-    s.textContent = c.actif ? "Notifications : ce téléphone prévient "+c.autre+" 🔔" : "Notifications désactivées sur ce téléphone";
+    var parts = [];
+    if (nouveauJeton) parts.push("Jeton enregistré ✅");
+    parts.push(c.actif ? "Notifications : ce téléphone prévient "+c.autre+" 🔔" : "Notifications désactivées sur ce téléphone");
+    if (!TOKEN) parts.push("⚠️ jeton toujours manquant");
+    s.textContent = parts.join(" · ");
   });
   document.getElementById("nTest").addEventListener("click", function(){
     var s = document.getElementById("status");
@@ -545,6 +569,7 @@
   });
 
   majCloche();
+  if (!TOKEN) document.getElementById("status").textContent = MSG_JETON;
   load();
   setInterval(load, 60000);
 </script>

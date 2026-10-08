@@ -101,7 +101,7 @@ function page(opts) {
       createElement: function () { return element(''); }
     },
     window: { matchMedia: function () { return { matches: false }; } },
-    location: { hash: '#jeton-de-test', search: '' },
+    location: { hash: opts.hash != null ? opts.hash : '#jeton-de-test', search: '' },
     localStorage: { getItem: function (k) { return stockage[k] || null; }, setItem: function (k, v) { stockage[k] = String(v); } },
     URLSearchParams: URLSearchParams,
     fetch: fauxFetch,
@@ -303,6 +303,55 @@ cas('ntfy : sujet au mauvais format → rien n\'est enregistré, message clair',
   d.getElementById('nSave').declencher('click');
   egal(p.stockage.mimi_ntfy_marine, 'sujet-de-marine', 'ancien réglage conservé');
   egal(statut(p), 'Sujet ntfy invalide : lettres, chiffres, - et _ seulement (rien n\'est enregistré)', 'message');
+});
+
+/* ------------------------------------------------------------------ Jeton (page ouverte depuis le widget, sans #) */
+
+var MSG_JETON = 'Jeton manquant : touche 🔔 (ou 🔕) en haut et colle le jeton de la to-do';
+function ajouter(p, texte) {
+  p.contexte.document.getElementById('t').value = texte;
+  p.contexte.document.getElementById('go').declencher('click');
+}
+function reglerJeton(p, saisie) {
+  var d = p.contexte.document;
+  d.getElementById('bell').declencher('click');
+  d.getElementById('nTok').value = saisie;
+  d.getElementById('nSave').declencher('click');
+}
+
+cas('jeton : page ouverte sans jeton → message clair dès l\'ouverture, ajout bloqué sans appel au hub', async function () {
+  var p = page({ hash: '' }); await stable();
+  egal(statut(p), MSG_JETON, 'message à l\'ouverture');
+  ajouter(p, 'Acheter du pain'); await stable();
+  egal(statut(p), MSG_JETON, 'message à l\'ajout');
+  egal(p.ajouts().length, 0, 'aucun appel au hub');
+});
+
+cas('jeton : collé dans les réglages 🔔 → gardé dans le téléphone, l\'ajout marche avec lui', async function () {
+  var p = page({ hash: '' }); await stable();
+  reglerJeton(p, '  jeton-colle ');
+  egal(p.stockage.mimi_token, 'jeton-colle', 'jeton gardé (espaces retirés)');
+  ok(/^Jeton enregistré ✅/.test(statut(p)), 'confirmation : ' + statut(p));
+  ajouter(p, 'Acheter du pain'); await stable();
+  egal(p.ajouts().length, 1, 'ajout envoyé');
+  egal(p.ajouts()[0].token, 'jeton-colle', 'avec le jeton collé');
+});
+
+cas('jeton : lien complet de l\'icône collé (…/#jeton) → seul le jeton est gardé', async function () {
+  var p = page({ hash: '' }); await stable();
+  reglerJeton(p, 'https://maxencebonnetcarrier-ship-it.github.io/todo-mimis/#jeton-colle');
+  egal(p.stockage.mimi_token, 'jeton-colle', 'partie après le #');
+});
+
+cas('jeton : champ laissé vide → le jeton déjà gardé est conservé et jamais réaffiché', async function () {
+  var p = page({ hash: '', stockage: { mimi_token: 'ancien-jeton' } }); await stable();
+  egal(statut(p), '', 'pas d\'alerte quand le jeton est déjà là');
+  p.contexte.document.getElementById('bell').declencher('click');
+  egal(p.contexte.document.getElementById('nTok').value, '', 'le jeton n\'est pas réaffiché en clair');
+  p.contexte.document.getElementById('nSave').declencher('click');
+  egal(p.stockage.mimi_token, 'ancien-jeton', 'jeton conservé');
+  ajouter(p, 'Acheter du pain'); await stable();
+  egal(p.ajouts()[0].token, 'ancien-jeton', 'ajout avec l\'ancien jeton');
 });
 
 cas('Ajout refusé par le hub : l\'ancienne ligne n\'est PAS supprimée', async function () {

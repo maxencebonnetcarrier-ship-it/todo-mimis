@@ -66,6 +66,12 @@ Bloc-notes entre sessions : où on en est, comment ça marche, ce qui reste.
   `d9f6ac8` (retrait de l'ancien rappel GitHub), poussés par la clé SSH `github-maxence`. Vérifiée
   en ligne : bouton 🔔 présent, aucun jeton dans la page. Il reste à régler les deux téléphones.
   Limite assumée : une modification tapée directement dans le Sheet ne prévient personne.
+- **Jeton collable dans les réglages 🔔** (2026-10-08, choix de Maxence). Cause : une page ouverte
+  sans `#jeton` (bouton « Parler / Ajouter » de la tuile widget, autre navigateur, téléphone
+  nettoyé) n'avait pas de jeton, d'où « jeton manquant » à l'ajout. Le panneau 🔔 a maintenant un
+  champ « Jeton », qui accepte aussi le lien complet de l'icône. Un message clair s'affiche dès
+  l'ouverture, et le jeton gardé n'est jamais réaffiché. Preuve : `node test-index.js` 19/19, 3 cas
+  rouges avant la correction, 4 versions cassées exprès détectées.
 - **Fiche ⚙️ : le propriétaire n'est plus effacé** (2026-10-07). « Maxence Bonnet-Carrier Marine »
   s'affiche et s'enregistre comme « Maxence + Marine » (`normOwner`). Un propriétaire tapé à la
   main, absent du menu, est gardé. Preuve : `node test-index.js`, 2 cas rouges avant la
