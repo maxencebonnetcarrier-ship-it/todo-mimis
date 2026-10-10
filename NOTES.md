@@ -72,6 +72,18 @@ Bloc-notes entre sessions : où on en est, comment ça marche, ce qui reste.
   champ « Jeton », qui accepte aussi le lien complet de l'icône. Un message clair s'affiche dès
   l'ouverture, et le jeton gardé n'est jamais réaffiché. Preuve : `node test-index.js` 19/19, 3 cas
   rouges avant la correction, 4 versions cassées exprès détectées.
+- **Lien de réglage en un toucher** (2026-10-10, choix de Maxence). Constat du 2026-10-09 : les
+  messages arrivaient bien sur ntfy.sh (rappels et tests lus en cache), mais **aucun téléphone ne
+  les voyait, même en rafraîchissant l'appli ntfy** : les abonnements portaient sur un sujet mal
+  recopié, et la page n'avait rien envoyé vers les vrais sujets. Remède : un lien
+  `…/todo-mimis/#jeton=J&moi=Marine&max=SUJET&mar=SUJET` règle tout le téléphone (jeton,
+  « Je suis », les deux sujets) ; il marche aussi collé dans le champ jeton de 🔔 (page ouverte
+  par l'icône ou le widget, qui ont leur propre mémoire). Valeur au mauvais format = ignorée et
+  signalée. L'ancien `#jeton` seul marche toujours. Dans 🔔 : bouton « M'abonner dans ntfy
+  (Android) » (lien `ntfy://`, documenté pour Android seulement) et « Copier mon sujet ntfy
+  (iPhone) ». Les liens ne sont **pas** dans ce dépôt (secrets) : ils ont été donnés dans le chat.
+  Preuve : `node test-index.js` 25/25, 5 cas rouges avant, 6 versions cassées exprès détectées,
+  lien réel lu par Chrome sans fenêtre (valeurs factices).
 - **Fiche ⚙️ : le propriétaire n'est plus effacé** (2026-10-07). « Maxence Bonnet-Carrier Marine »
   s'affiche et s'enregistre comme « Maxence + Marine » (`normOwner`). Un propriétaire tapé à la
   main, absent du menu, est gardé. Preuve : `node test-index.js`, 2 cas rouges avant la
@@ -84,9 +96,9 @@ Bloc-notes entre sessions : où on en est, comment ça marche, ce qui reste.
 
 ## À faire côté Maxence
 
-1. Régler les deux téléphones : ouvrir la page, bouton 🔕 → « Je suis » + les deux sujets →
-   Enregistrer, puis « Envoyer un test à l'autre ». Abonner chacun à son propre sujet dans ntfy.
-   Voir `NOTIFICATIONS.md`.
+1. Régler les deux téléphones avec **leur lien de réglage** (donné dans le chat), puis 🔔 →
+   « M'abonner dans ntfy » (Android) ou « Copier mon sujet » + coller dans ntfy (iPhone), puis
+   « Envoyer un test à l'autre ». Voir `NOTIFICATIONS.md`.
 2. Raccourci Siri de Marine : ajouter l'action qui prévient Maxence (`ios/README-iOS.md`, 3 bis).
 3. Le secret GitHub `NTFY_TOPIC` du dépôt ne sert plus : on peut le supprimer.
    (Fait le 2026-10-07 : page publiée, `Notifications.gs` réinstallé, ancien rappel GitHub retiré.)

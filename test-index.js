@@ -104,6 +104,7 @@ function page(opts) {
     location: { hash: opts.hash != null ? opts.hash : '#jeton-de-test', search: '' },
     localStorage: { getItem: function (k) { return stockage[k] || null; }, setItem: function (k, v) { stockage[k] = String(v); } },
     URLSearchParams: URLSearchParams,
+    navigator: opts.navigator || {},
     fetch: fauxFetch,
     setInterval: function () {},
     console: console
@@ -352,6 +353,76 @@ cas('jeton : champ laissé vide → le jeton déjà gardé est conservé et jama
   egal(p.stockage.mimi_token, 'ancien-jeton', 'jeton conservé');
   ajouter(p, 'Acheter du pain'); await stable();
   egal(p.ajouts()[0].token, 'ancien-jeton', 'ajout avec l\'ancien jeton');
+});
+
+/* ------------------------------------------------------------------ Lien de réglage (un toucher par téléphone) */
+
+var LIEN_MARINE = '#jeton=J-lien&moi=Marine&max=sujet-de-maxence&mar=sujet-de-marine';
+var MSG_LIEN_MARINE = 'Réglages du lien enregistrés ✅ : tu es Marine, ce téléphone prévient Maxence 🔔 · touche 🔔 pour t\'abonner dans ntfy';
+
+cas('lien de réglage : ouvert sur un téléphone vierge → jeton, « Je suis » et les deux sujets enregistrés', async function () {
+  var p = page({ hash: LIEN_MARINE }); await stable();
+  egal(p.stockage.mimi_token, 'J-lien', 'jeton');
+  egal(p.stockage.mimi_moi, 'Marine', 'qui');
+  egal(p.stockage.mimi_ntfy_maxence, 'sujet-de-maxence', 'sujet de Maxence');
+  egal(p.stockage.mimi_ntfy_marine, 'sujet-de-marine', 'sujet de Marine');
+  egal(p.contexte.document.getElementById('bell').textContent, '🔔', 'cloche allumée');
+  egal(statut(p), MSG_LIEN_MARINE, 'confirmation visible');
+  ajouter(p, 'Acheter du pain'); await stable();
+  egal(p.ajouts()[0].token, 'J-lien', 'ajout avec le jeton du lien (pas « jeton=… »)');
+  egal(p.ntfy.length, 1, 'notification envoyée');
+  egal(p.ntfy[0].topic, 'sujet-de-maxence', 'à Maxence');
+});
+
+cas('lien de réglage : rouvert alors que tout est déjà réglé → aucun message, ajout normal', async function () {
+  var p = page({ hash: LIEN_MARINE, stockage: { mimi_token: 'J-lien', mimi_moi: 'Marine',
+    mimi_ntfy_maxence: 'sujet-de-maxence', mimi_ntfy_marine: 'sujet-de-marine' } }); await stable();
+  egal(statut(p), '', 'pas de message à chaque ouverture');
+});
+
+cas('lien de réglage : valeur au mauvais format → ignorée et signalée, le reste appliqué', async function () {
+  var p = page({ hash: '#jeton=J-lien&moi=Paul&max=sujet-de-maxence&mar=pas%20bon' }); await stable();
+  egal(p.stockage.mimi_token, 'J-lien', 'jeton appliqué');
+  egal(p.stockage.mimi_ntfy_maxence, 'sujet-de-maxence', 'sujet valide appliqué');
+  ok(!p.stockage.mimi_moi && !p.stockage.mimi_ntfy_marine, 'valeurs invalides jamais enregistrées');
+  egal(statut(p), 'Réglages du lien enregistrés ✅ · ⚠️ ignoré (format invalide) : « Je suis », sujet de Marine', 'message');
+});
+
+cas('lien de réglage : collé dans le champ jeton de 🔔 → tout est réglé (page ouverte par l\'icône ou le widget)', async function () {
+  var p = page({ hash: '' }); await stable();
+  reglerJeton(p, 'https://maxencebonnetcarrier-ship-it.github.io/todo-mimis/' + LIEN_MARINE);
+  egal(p.stockage.mimi_token, 'J-lien', 'jeton seul, pas tout le lien');
+  egal(p.stockage.mimi_moi, 'Marine', 'qui');
+  egal(p.stockage.mimi_ntfy_maxence, 'sujet-de-maxence', 'sujet de Maxence');
+  egal(statut(p), MSG_LIEN_MARINE, 'confirmation');
+  ajouter(p, 'Acheter du pain'); await stable();
+  egal(p.ajouts()[0].token, 'J-lien', 'ajout avec le jeton du lien');
+});
+
+cas('ntfy : bouton « M\'abonner dans ntfy » → ouvre l\'appli Android sur MON sujet', async function () {
+  var p = page({ stockage: regle('Marine') }); await stable();
+  var d = p.contexte.document;
+  d.getElementById('bell').declencher('click');
+  egal(d.getElementById('nAbo').hidden, false, 'bouton visible quand mon sujet est réglé');
+  d.getElementById('nAbo').declencher('click');
+  egal(p.contexte.location.href, 'ntfy://ntfy.sh/sujet-de-marine?display=To-do+Mimis', 'lien d\'abonnement');
+  var p2 = page(); await stable();
+  p2.contexte.document.getElementById('bell').declencher('click');
+  egal(p2.contexte.document.getElementById('nAbo').hidden, true, 'caché tant que rien n\'est réglé');
+});
+
+cas('ntfy : bouton « Copier mon sujet » → copie MON sujet (iPhone), sinon l\'affiche', async function () {
+  var copie = [];
+  var nav = { clipboard: { writeText: function (t) { copie.push(t); return Promise.resolve(); } } };
+  var p = page({ stockage: regle('Maxence'), navigator: nav }); await stable();
+  p.contexte.document.getElementById('bell').declencher('click');
+  p.contexte.document.getElementById('nCopie').declencher('click'); await stable();
+  egal(copie[0], 'sujet-de-maxence', 'sujet copié');
+  egal(statut(p), 'Ton sujet est copié ✅ : dans ntfy, touche + et colle-le', 'consigne');
+  var p2 = page({ stockage: regle('Maxence') }); await stable();
+  p2.contexte.document.getElementById('bell').declencher('click');
+  p2.contexte.document.getElementById('nCopie').declencher('click'); await stable();
+  egal(statut(p2), 'Copie impossible ici. Ton sujet ntfy : sujet-de-maxence', 'repli sans presse-papiers');
 });
 
 cas('Ajout refusé par le hub : l\'ancienne ligne n\'est PAS supprimée', async function () {

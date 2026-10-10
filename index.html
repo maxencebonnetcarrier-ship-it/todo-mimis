@@ -128,7 +128,7 @@
     <label class="fld">Jeton de la to-do (nécessaire pour ajouter)
       <input type="text" id="nTok" autocomplete="off" autocapitalize="off" spellcheck="false">
     </label>
-    <div class="nInfo">Le jeton est la fin du lien de l'icône, après le #. Tu peux coller le lien entier.</div>
+    <div class="nInfo">Le jeton est la fin du lien de l'icône, après le #. Tu peux coller le lien entier — un lien de réglage collé ici règle aussi tout le reste.</div>
     <div class="nInfo">Notifications : ce téléphone prévient l'autre à chaque ajout, report, « terminé », modification ou suppression fait ici. Les deux sujets ntfy se lisent dans Apps Script → ⚙️ Paramètres du projet → Propriétés du script.</div>
     <label class="fld">Je suis
       <select id="nMoi"><option value="">—</option><option>Maxence</option><option>Marine</option></select>
@@ -141,6 +141,8 @@
     </label>
     <button id="nSave">Enregistrer</button>
     <button id="nTest">Envoyer un test à l'autre</button>
+    <button id="nAbo" hidden>📲 M'abonner dans ntfy (Android)</button>
+    <button id="nCopie">📋 Copier mon sujet ntfy (iPhone)</button>
     <button id="nClose">Fermer</button>
   </div>
 </div>
@@ -152,20 +154,54 @@
   // Le jeton n'est PAS dans le code (depot public). Il arrive via le # de l'URL
   // (icone "Parler" : .../#monjeton), jamais envoye au serveur, puis memorise en local.
   var TOKEN = "";
+  var SUJET_OK = /^[A-Za-z0-9_-]{1,64}$/;
+  // Ce qu'il y a apres le # : soit le jeton seul (icone "Parler" : .../#monjeton), soit un LIEN DE
+  // REGLAGE qui regle tout le telephone d'un toucher : .../#jeton=J&moi=Marine&max=SUJET&mar=SUJET.
+  // Accepte aussi le lien entier colle dans le champ jeton de 🔔.
+  function lireLien(saisie){
+    var t = String(saisie || "").trim();
+    var i = t.indexOf("#"); if (i !== -1) t = t.slice(i + 1);
+    if (!/(^|&)(jeton|moi|max|mar)=/.test(t)) {
+      try { t = decodeURIComponent(t); } catch(e){}
+      return { reglage:false, jeton:t.trim() };
+    }
+    var r = { reglage:true, jeton:"" };
+    t.split("&").forEach(function(paire){
+      var k = paire.indexOf("="); if (k < 1) return;
+      var v = paire.slice(k + 1).replace(/\+/g, " ");
+      try { v = decodeURIComponent(v); } catch(e){}
+      r[paire.slice(0, k)] = v.trim();
+    });
+    return r;
+  }
+  function jetonDe(saisie){ return lireLien(saisie).jeton; } // jeton seul ou lien complet .../#jeton
+  // Enregistre dans ce telephone ce que porte un lien de reglage ; une valeur au mauvais format est
+  // ignoree et signalee. Rend { change, texte } : change=false si le telephone etait deja regle ainsi.
+  function appliquerReglages(r){
+    var cles = ["mimi_token","mimi_moi","mimi_ntfy_maxence","mimi_ntfy_marine"];
+    var avant = cles.map(lireLocal).join("|"), refus = [];
+    try {
+      if (r.jeton) localStorage.setItem("mimi_token", r.jeton);
+      if (r.moi != null) { if (r.moi === "Maxence" || r.moi === "Marine") localStorage.setItem("mimi_moi", r.moi); else refus.push("« Je suis »"); }
+      if (r.max != null) { if (SUJET_OK.test(r.max)) localStorage.setItem("mimi_ntfy_maxence", r.max); else refus.push("sujet de Maxence"); }
+      if (r.mar != null) { if (SUJET_OK.test(r.mar)) localStorage.setItem("mimi_ntfy_marine", r.mar); else refus.push("sujet de Marine"); }
+    } catch(e){ return { change:true, texte:"Impossible d'enregistrer sur ce téléphone : "+e.message }; }
+    var c = notifCfg();
+    var texte = "Réglages du lien enregistrés ✅"
+      + (c.actif ? " : tu es "+c.moi+", ce téléphone prévient "+c.autre+" 🔔 · touche 🔔 pour t'abonner dans ntfy" : "");
+    if (refus.length) texte += " · ⚠️ ignoré (format invalide) : "+refus.join(", ");
+    return { change: refus.length > 0 || cles.map(lireLocal).join("|") !== avant, texte:texte };
+  }
+  var MSG_LIEN = "";
   (function(){
-    var h = location.hash ? decodeURIComponent(location.hash.slice(1)) : "";
-    if (h) { TOKEN = h; try { localStorage.setItem("mimi_token", h); } catch(e){} }
-    else { try { TOKEN = localStorage.getItem("mimi_token") || ""; } catch(e){} }
+    var r = lireLien(location.hash || "");
+    if (r.reglage) { var a = appliquerReglages(r); if (a.change) MSG_LIEN = a.texte; TOKEN = lireLocal("mimi_token"); }
+    else if (r.jeton) { TOKEN = r.jeton; try { localStorage.setItem("mimi_token", r.jeton); } catch(e){} }
+    else TOKEN = lireLocal("mimi_token");
   })();
   // Page ouverte sans # (bouton de la tuile widget, autre navigateur, telephone nettoye) :
   // le jeton se colle dans les reglages 🔔, une fois par navigateur.
   var MSG_JETON = "Jeton manquant : touche 🔔 (ou 🔕) en haut et colle le jeton de la to-do";
-  function jetonDe(saisie){ // accepte le jeton seul ou le lien complet .../#jeton
-    var t = String(saisie || "").trim();
-    var i = t.lastIndexOf("#"); if (i !== -1) t = t.slice(i + 1);
-    try { t = decodeURIComponent(t); } catch(e){}
-    return t.trim();
-  }
   var ORDER = { "Haute":0, "Moyenne":1, "Basse":2 };
   var COLOR = { "Haute":"var(--haute)", "Moyenne":"var(--moyenne)", "Basse":"var(--basse)" };
 
@@ -197,7 +233,6 @@
   // Les sujets ntfy sont des secrets : ils restent dans ce telephone, jamais dans le depot public.
   var NTFY = "https://ntfy.sh/";
   var APP_URL = "https://maxencebonnetcarrier-ship-it.github.io/todo-mimis/";
-  var SUJET_OK = /^[A-Za-z0-9_-]{1,64}$/;
   function lireLocal(k){ try { return localStorage.getItem(k) || ""; } catch(e){ return ""; } }
   function notifCfg(){
     var moi = lireLocal("mimi_moi");
@@ -206,6 +241,12 @@
     return { moi:moi, autre:autre, sujet:sujet, actif: !!(autre && SUJET_OK.test(sujet)) };
   }
   function majCloche(){ var b=document.getElementById("bell"); if(b) b.textContent = notifCfg().actif ? "🔔" : "🔕"; }
+  // Mon propre sujet (celui auquel CE telephone doit etre abonne dans l'appli ntfy).
+  function monSujet(){
+    var moi = lireLocal("mimi_moi");
+    var s = moi === "Maxence" ? lireLocal("mimi_ntfy_maxence") : (moi === "Marine" ? lireLocal("mimi_ntfy_marine") : "");
+    return SUJET_OK.test(s) ? s : "";
+  }
   // Previent l'autre et ajoute le resultat au message d'etat. Ne bloque jamais l'action elle-meme.
   function notifier(titre, message, s){
     var c = notifCfg();
@@ -529,6 +570,7 @@
     document.getElementById("nMoi").value = lireLocal("mimi_moi");
     document.getElementById("nMax").value = lireLocal("mimi_ntfy_maxence");
     document.getElementById("nMar").value = lireLocal("mimi_ntfy_marine");
+    document.getElementById("nAbo").hidden = !monSujet();
     document.getElementById("nmodal").hidden = false;
   }
   function fermerNotif(){ document.getElementById("nmodal").hidden = true; }
@@ -537,6 +579,11 @@
   document.getElementById("nmodal").addEventListener("click", function(e){ if(e.target.id==="nmodal") fermerNotif(); });
   document.getElementById("nSave").addEventListener("click", function(){
     var s = document.getElementById("status");
+    var lien = lireLien(document.getElementById("nTok").value);
+    if (lien.reglage) { // lien de reglage colle dans le champ jeton : il regle tout, il prime sur les champs
+      var a = appliquerReglages(lien);
+      TOKEN = lireLocal("mimi_token"); fermerNotif(); majCloche(); s.textContent = a.texte; return;
+    }
     var moi = document.getElementById("nMoi").value;
     var max = document.getElementById("nMax").value.trim();
     var mar = document.getElementById("nMar").value.trim();
@@ -567,9 +614,27 @@
     s.textContent="Test envoyé à "+c.autre+"…";
     notifier("t'envoie un test", "Si tu lis ceci, les notifications de la to-do marchent 🎉", s);
   });
+  // Abonnement a MON sujet sans rien recopier : l'appli ntfy Android accepte les liens ntfy://
+  // (https://docs.ntfy.sh/subscribe/phone/). Rien de tel n'est documente pour l'iPhone -> bouton Copier.
+  document.getElementById("nAbo").addEventListener("click", function(){
+    var sujet = monSujet(); if (!sujet) return;
+    location.href = "ntfy://ntfy.sh/"+sujet+"?display=To-do+Mimis";
+  });
+  document.getElementById("nCopie").addEventListener("click", function(){
+    var s = document.getElementById("status");
+    var sujet = monSujet();
+    fermerNotif();
+    if (!sujet) { s.textContent="Règle d'abord « Je suis » et ton sujet, puis Enregistrer"; return; }
+    var repli = "Copie impossible ici. Ton sujet ntfy : "+sujet;
+    if (!(navigator.clipboard && navigator.clipboard.writeText)) { s.textContent = repli; return; }
+    navigator.clipboard.writeText(sujet)
+      .then(function(){ s.textContent="Ton sujet est copié ✅ : dans ntfy, touche + et colle-le"; })
+      .catch(function(){ s.textContent = repli; });
+  });
 
   majCloche();
-  if (!TOKEN) document.getElementById("status").textContent = MSG_JETON;
+  if (MSG_LIEN) document.getElementById("status").textContent = MSG_LIEN;
+  else if (!TOKEN) document.getElementById("status").textContent = MSG_JETON;
   load();
   setInterval(load, 60000);
 </script>
